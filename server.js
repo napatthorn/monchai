@@ -708,6 +708,12 @@ function handleUpdateCustomer(req, res) {
   req.on('end', async () => {
     const parsed = parse(body);
     const { formData, errors } = validateFormData(parsed);
+    const cameFromExpiring = String(formData.from || '').trim().toLowerCase() === 'expiring';
+    if (!cameFromExpiring) {
+      if (String(formData.status || '').trim() !== 'ลูกค้าไม่ต่อ') {
+        formData.status = '';
+      }
+    }
     if (!formData.rowNumber) errors.rowNumber = 'ไม่พบหมายเลขแถวของข้อมูล';
 
     if (Object.keys(errors).length > 0) {
@@ -724,7 +730,6 @@ function handleUpdateCustomer(req, res) {
       return;
     }
     // Business rule: Only enforce from the expiring dashboard when status is "ต่อสัญญาเรียบร้อย" (no upcoming expiries)
-    const cameFromExpiring = String(formData.from || '').trim().toLowerCase() === 'expiring';
     if (cameFromExpiring && (formData.status || '') === 'ต่อสัญญาเรียบร้อย') {
       const act = daysUntil(formData.actExpiryDate);
       const tax = daysUntil(formData.taxExpiryDate);
@@ -752,6 +757,7 @@ function handleUpdateCustomer(req, res) {
         return;
       }
     }
+    const statusForRecord = formData.status === '' ? null : (formData.status || 'ยังไม่แจ้งลูกค้า');
     const record = {
       timestamp: formData.timestamp || new Date().toISOString(),
       customerName: formData.customerName,
@@ -763,7 +769,7 @@ function handleUpdateCustomer(req, res) {
       voluntaryIssuedDate: formData.voluntaryIssuedDate || null,
       voluntaryExpiryDate: formData.voluntaryExpiryDate || null,
       phone: formData.phone,
-      status: formData.status || 'ยังไม่แจ้งลูกค้า',
+      status: statusForRecord,
       notes: formData.notes || null
     };
     await updateCustomerInSheet(formData.rowNumber, record);
@@ -835,12 +841,23 @@ async function handleExpiring(req, res, url) {
         if (desiredStatus === 'ต่อสัญญาเรียบร้อย' && hasUpcomingExpiry) {
           desiredStatus = 'กำลังดำเนินการ';
         }
-        const shouldUpdate = desiredStatus !== rawStatus || rawStatus !== originalStatus;
+        const originalNameRaw = current.customerName == null ? '' : String(current.customerName);
+        const trimmedName = originalNameRaw.trimEnd();
+        let desiredName = trimmedName;
+        if (desiredStatus === 'ลูกค้าไม่ต่อ') {
+          const suffix = ' (ลูกค้าไม่ต่อ)';
+          if (!trimmedName.endsWith(suffix)) {
+            desiredName = trimmedName ? `${trimmedName}${suffix}` : 'ลูกค้าไม่ต่อ';
+          }
+        }
+        const nameUpdated = desiredName !== trimmedName;
+        const shouldUpdate = desiredStatus !== rawStatus || rawStatus !== originalStatus || nameUpdated;
         current.status = desiredStatus;
+        current.customerName = desiredName;
         if (!shouldUpdate || !current.rowNumber) return null;
         const record = {
           timestamp: current.timestamp || new Date().toISOString(),
-          customerName: current.customerName,
+          customerName: desiredName,
           licensePlate: current.licensePlate,
           actIssuedDate: current.actIssuedDate || null,
           actExpiryDate: current.actExpiryDate || null,
@@ -859,7 +876,8 @@ async function handleExpiring(req, res, url) {
   } catch (e) {
     console.warn('Auto-update status on expiring load failed:', e);
   }
-  const html = renderExpiringPage({ customers: items, days });
+  const visibleItems = items.filter(it => String(it.customer.status || '').trim() !== 'ลูกค้าไม่ต่อ');
+  const html = renderExpiringPage({ customers: visibleItems, days });
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(html);
 }
