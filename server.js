@@ -244,7 +244,7 @@ function renderCustomerForm({
       <div class="field">
         <label for="status">สถานะ</label>
         <select id="status" name="status">
-          <option value="ยังไม่แจ้ง" ${safe('status') === 'ยังไม่แจ้ง' ? 'selected' : ''}>ยังไม่แจ้ง</option>
+          <option value="ยังไม่แจ้งลูกค้า" ${safe('status') === 'ยังไม่แจ้งลูกค้า' || safe('status') === 'ยังไม่แจ้ง' ? 'selected' : ''}>ยังไม่แจ้งลูกค้า</option>
           <option value="กำลังดำเนินการ" ${safe('status') === 'กำลังดำเนินการ' ? 'selected' : ''}>กำลังดำเนินการ</option>
           <option value="ลูกค้าไม่ต่อ" ${safe('status') === 'ลูกค้าไม่ต่อ' ? 'selected' : ''}>ลูกค้าไม่ต่อ</option>
           <option value="ต่อสัญญาเรียบร้อย" ${safe('status') === 'ต่อสัญญาเรียบร้อย' ? 'selected' : ''}>ต่อสัญญาเรียบร้อย</option>
@@ -402,8 +402,9 @@ function renderExpiringPage({ customers = [], days = DEFAULT_EXPIRY_WINDOW_DAYS 
   const renderStatus = (value) => {
     const text = String(value ?? '').trim();
     const map = {
-      '1': 'ยังไม่แจ้ง',
-      'ยังไม่แจ้ง': 'ยังไม่แจ้ง',
+      '1': 'ยังไม่แจ้งลูกค้า',
+      'ยังไม่แจ้ง': 'ยังไม่แจ้งลูกค้า',
+      'ยังไม่แจ้งลูกค้า': 'ยังไม่แจ้งลูกค้า',
       '2': 'กำลังดำเนินการ',
       'กำลังดำเนินการ': 'กำลังดำเนินการ',
       '3': 'ลูกค้าไม่ต่อ',
@@ -411,7 +412,14 @@ function renderExpiringPage({ customers = [], days = DEFAULT_EXPIRY_WINDOW_DAYS 
       '4': 'ต่อสัญญาเรียบร้อย',
       'ต่อสัญญาเรียบร้อย': 'ต่อสัญญาเรียบร้อย'
     };
-    return escapeHtml(map[text] || 'ยังไม่แจ้ง');
+    const label = map[text] || 'ยังไม่แจ้งลูกค้า';
+    if (label === 'กำลังดำเนินการ') {
+      return `<strong style='color:#f97316;'>${escapeHtml(label)}</strong>`;
+    }
+    if (label === 'ยังไม่แจ้งลูกค้า') {
+      return `<strong style='color:#dc2626;'>${escapeHtml(label)}</strong>`;
+    }
+    return escapeHtml(label);
   };
 
   const tableContent = customers.length
@@ -425,8 +433,8 @@ function renderExpiringPage({ customers = [], days = DEFAULT_EXPIRY_WINDOW_DAYS 
             <th>ภาคสมัครใจ</th>
             <th>เหลืออีก (วัน)</th>
             <th>เบอร์ติดต่อ</th>
-            <th>สถานะ</th>
             <th>หมายเหตุ</th>
+            <th>สถานะ</th>
           </tr>
         </thead>
         <tbody>
@@ -439,8 +447,8 @@ function renderExpiringPage({ customers = [], days = DEFAULT_EXPIRY_WINDOW_DAYS 
               <td>${describePair('ทำ', item.customer.voluntaryIssuedDate, 'ครบกำหนด', item.customer.voluntaryExpiryDate, (item.vol ?? null) !== null && item.vol >= 0 && item.vol < days)}</td>
               <td>${item.minDaysRemaining}</td>
               <td>${escapeHtml(item.customer.phone || '')}</td>
-              <td>${renderStatus(item.customer.status)}</td>
               <td>${escapeHtml(item.customer.notes || '')}</td>
+              <td>${renderStatus(item.customer.status)}</td>
             </tr>`).join('')}
         </tbody>
       </table>`
@@ -598,16 +606,17 @@ function validateFormData(parsed) {
 
   // Normalise status to Thai labels
   const statusMap = {
-    '1': 'ยังไม่แจ้ง',
+    '1': 'ยังไม่แจ้งลูกค้า',
     '2': 'กำลังดำเนินการ',
     '3': 'ลูกค้าไม่ต่อ',
     '4': 'ต่อสัญญาเรียบร้อย',
-    'ยังไม่แจ้ง': 'ยังไม่แจ้ง',
+    'ยังไม่แจ้ง': 'ยังไม่แจ้งลูกค้า',
+    'ยังไม่แจ้งลูกค้า': 'ยังไม่แจ้งลูกค้า',
     'กำลังดำเนินการ': 'กำลังดำเนินการ',
     'ลูกค้าไม่ต่อ': 'ลูกค้าไม่ต่อ',
     'ต่อสัญญาเรียบร้อย': 'ต่อสัญญาเรียบร้อย'
   };
-  const statusValue = formData.status in statusMap ? statusMap[formData.status] : (formData.status || 'ยังไม่แจ้ง');
+  const statusValue = formData.status in statusMap ? statusMap[formData.status] : (formData.status || 'ยังไม่แจ้งลูกค้า');
   formData.status = statusValue;
 
   if (!formData.phone) {
@@ -681,7 +690,7 @@ function handleCreateCustomer(req, res) {
       voluntaryIssuedDate: formData.voluntaryIssuedDate || null,
       voluntaryExpiryDate: formData.voluntaryExpiryDate || null,
       phone: formData.phone,
-      status: formData.status || 'ยังไม่แจ้ง',
+      status: formData.status || 'ยังไม่แจ้งลูกค้า',
       notes: formData.notes || null
     };
     await syncToGoogleSheet(record);
@@ -714,8 +723,9 @@ function handleUpdateCustomer(req, res) {
       }));
       return;
     }
-    // Business rule: Only if status is "ต่อสัญญาเรียบร้อย", ensure no expiry is within the display window (<30 days)
-    if ((formData.status || '') === 'ต่อสัญญาเรียบร้อย') {
+    // Business rule: Only enforce from the expiring dashboard when status is "ต่อสัญญาเรียบร้อย" (no upcoming expiries)
+    const cameFromExpiring = String(formData.from || '').trim().toLowerCase() === 'expiring';
+    if (cameFromExpiring && (formData.status || '') === 'ต่อสัญญาเรียบร้อย') {
       const act = daysUntil(formData.actExpiryDate);
       const tax = daysUntil(formData.taxExpiryDate);
       const vol = daysUntil(formData.voluntaryExpiryDate);
@@ -753,7 +763,7 @@ function handleUpdateCustomer(req, res) {
       voluntaryIssuedDate: formData.voluntaryIssuedDate || null,
       voluntaryExpiryDate: formData.voluntaryExpiryDate || null,
       phone: formData.phone,
-      status: formData.status || 'ยังไม่แจ้ง',
+      status: formData.status || 'ยังไม่แจ้งลูกค้า',
       notes: formData.notes || null
     };
     await updateCustomerInSheet(formData.rowNumber, record);
@@ -800,13 +810,34 @@ async function handleExpiring(req, res, url) {
       return (ma - mb) || (getRecordSortTime(a.customer) - getRecordSortTime(b.customer));
     });
 
-  // Auto-default status to "ยังไม่แจ้ง" for any visible rows lacking a valid status.
-  const VALID_STATUSES = new Set(['ยังไม่แจ้ง', 'กำลังดำเนินการ', 'ลูกค้าไม่ต่อ', 'ต่อสัญญาเรียบร้อย']);
+  const STATUS_CANONICAL = {
+    '1': 'ยังไม่แจ้งลูกค้า',
+    'ยังไม่แจ้ง': 'ยังไม่แจ้งลูกค้า',
+    'ยังไม่แจ้งลูกค้า': 'ยังไม่แจ้งลูกค้า',
+    '2': 'กำลังดำเนินการ',
+    'กำลังดำเนินการ': 'กำลังดำเนินการ',
+    '3': 'ลูกค้าไม่ต่อ',
+    'ลูกค้าไม่ต่อ': 'ลูกค้าไม่ต่อ',
+    '4': 'ต่อสัญญาเรียบร้อย',
+    'ต่อสัญญาเรียบร้อย': 'ต่อสัญญาเรียบร้อย'
+  };
+  const FALLBACK_STATUS = 'ยังไม่แจ้งลูกค้า';
+  const isWithinWindow = v => v !== null && v >= 0 && v < days;
   try {
     const updates = items
-      .filter(it => !VALID_STATUSES.has(String(it.customer.status || '').trim()))
       .map(it => {
         const current = it.customer;
+        const originalStatus = current.status == null ? '' : String(current.status);
+        const rawStatus = originalStatus.trim();
+        const normalised = STATUS_CANONICAL[rawStatus] || null;
+        const hasUpcomingExpiry = isWithinWindow(it.act) || isWithinWindow(it.tax) || isWithinWindow(it.vol);
+        let desiredStatus = normalised ?? FALLBACK_STATUS;
+        if (desiredStatus === 'ต่อสัญญาเรียบร้อย' && hasUpcomingExpiry) {
+          desiredStatus = 'กำลังดำเนินการ';
+        }
+        const shouldUpdate = desiredStatus !== rawStatus || rawStatus !== originalStatus;
+        current.status = desiredStatus;
+        if (!shouldUpdate || !current.rowNumber) return null;
         const record = {
           timestamp: current.timestamp || new Date().toISOString(),
           customerName: current.customerName,
@@ -818,14 +849,15 @@ async function handleExpiring(req, res, url) {
           voluntaryIssuedDate: current.voluntaryIssuedDate || null,
           voluntaryExpiryDate: current.voluntaryExpiryDate || null,
           phone: current.phone,
-          status: 'ยังไม่แจ้ง',
+          status: desiredStatus,
           notes: current.notes || null
         };
         return updateCustomerInSheet(current.rowNumber, record);
-      });
+      })
+      .filter(Boolean);
     if (updates.length) await Promise.allSettled(updates);
   } catch (e) {
-    console.warn('Auto-default status updates failed:', e);
+    console.warn('Auto-update status on expiring load failed:', e);
   }
   const html = renderExpiringPage({ customers: items, days });
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
