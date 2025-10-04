@@ -1,0 +1,14 @@
+{
+  "name": "monchai-app",
+  "version": "1.0.0",
+  "description": "Local web app to capture customer name",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "node-fetch": "^3.3.2"
+  }
+}
