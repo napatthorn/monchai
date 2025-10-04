@@ -102,6 +102,13 @@ function renderLayout({ pageTitle, active = '', content = '', alertMarkup = '' }
     .table a.record-link:hover { text-decoration: underline; }
     .muted { color: #627d98; font-size: 0.9rem; }
     footer { text-align: center; padding: 1rem 0 2rem; color: rgba(255, 255, 255, 0.7); font-size: 0.85rem; }
+    .req { color: #e53e3e; margin-left: 4px; font-weight: 700; }
+    .due-highlight { color: #e53e3e; font-weight: 700; }
+    /* Icon-only button variant used for disabled bulk delete */
+    .btn-icon { display: inline-block; margin-right: 8px; }
+    .icon-only .btn-text { display: none; }
+    .icon-only .btn-icon { margin-right: 0; }
+    .icon-only { padding: 0.5rem; width: 42px; min-width: 42px; display: inline-flex; align-items: center; justify-content: center; }
     /* Home menu (icon grid) */
     .menu-grid { display: grid; grid-template-columns: repeat(1, minmax(0, 1fr)); gap: 1rem; }
     @media (min-width: 520px) { .menu-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -169,7 +176,9 @@ function renderCustomerForm({
   errors = {},
   message = '',
   status = '',
-  includeHidden = ''
+  includeHidden = '',
+  showStatus = false,
+  activeNav = ''
 } = {}) {
   const safe = key => escapeHtml(formData[key] ?? '');
   const valueFor = key => escapeHtml(formData[`${key}Input`] ?? formData[key] ?? '');
@@ -182,17 +191,17 @@ function renderCustomerForm({
     <form class="grid" method="POST" action="${escapeHtml(action)}" novalidate>
       ${includeHidden}
       <div class="field full-width">
-        <label for="customerName">ชื่อลูกค้า</label>
+        <label for="customerName">ชื่อลูกค้า${errors.customerName ? ' <span class="req">*</span>' : ''}</label>
         <input id="customerName" name="customerName" type="text" maxlength="100" placeholder="ระบุชื่อ-นามสกุลลูกค้า" value="${safe('customerName')}" required class="${errors.customerName ? 'invalid' : ''}" />
         ${fieldError('customerName')}
       </div>
       <div class="field">
-        <label for="licensePlate">ทะเบียนรถ</label>
+        <label for="licensePlate">ทะเบียนรถ${errors.licensePlate ? ' <span class="req">*</span>' : ''}</label>
         <input id="licensePlate" name="licensePlate" type="text" maxlength="60" placeholder="เช่น 1กก-1234" value="${safe('licensePlate')}" required class="${errors.licensePlate ? 'invalid' : ''}" />
         ${fieldError('licensePlate')}
       </div>
       <div class="field">
-        <label for="phone">เบอร์ติดต่อหลัก</label>
+        <label for="phone">เบอร์ติดต่อหลัก${errors.phone ? ' <span class="req">*</span>' : ''}</label>
         <input id="phone" name="phone" type="tel" maxlength="40" placeholder="เช่น 081-234-5678" value="${safe('phone')}" required class="${errors.phone ? 'invalid' : ''}" />
         ${fieldError('phone')}
       </div>
@@ -230,13 +239,26 @@ function renderCustomerForm({
         <label for="notes">หมายเหตุ</label>
         <textarea id="notes" name="notes" maxlength="500" placeholder="สรุปสิ่งที่ต้องพูดคุย ประวัติการติดตาม หรือข้อเสนอพิเศษสำหรับลูกค้า">${safe('notes')}</textarea>
       </div>
+      ${showStatus
+        ? `
+      <div class="field">
+        <label for="status">สถานะ</label>
+        <select id="status" name="status">
+          <option value="ยังไม่แจ้ง" ${safe('status') === 'ยังไม่แจ้ง' ? 'selected' : ''}>ยังไม่แจ้ง</option>
+          <option value="กำลังดำเนินการ" ${safe('status') === 'กำลังดำเนินการ' ? 'selected' : ''}>กำลังดำเนินการ</option>
+          <option value="ลูกค้าไม่ต่อ" ${safe('status') === 'ลูกค้าไม่ต่อ' ? 'selected' : ''}>ลูกค้าไม่ต่อ</option>
+          <option value="ต่อสัญญาเรียบร้อย" ${safe('status') === 'ต่อสัญญาเรียบร้อย' ? 'selected' : ''}>ต่อสัญญาเรียบร้อย</option>
+        </select>
+      </div>`
+        : `<input type="hidden" name="status" value="${safe('status')}">`
+      }
       <div class="field full-width">
         <button class="primary" type="submit">${escapeHtml(submitLabel)}</button>
       </div>
     </form>
   `;
 
-  const activeTab = action.includes('/customers/update') ? 'search' : 'new';
+  const activeTab = activeNav || (action.includes('/customers/update') ? 'search' : 'new');
   return renderLayout({ pageTitle: heading, active: activeTab, content, alertMarkup });
 }
 
@@ -255,6 +277,7 @@ function renderEditCustomerPage(options = {}) {
   const hidden = `
     <input type="hidden" name="rowNumber" value="${escapeHtml(formData.rowNumber ?? '')}" />
     <input type="hidden" name="timestamp" value="${escapeHtml(formData.timestamp ?? '')}" />
+    <input type="hidden" name="from" value="${escapeHtml(options.from || '')}" />
   `;
   return renderCustomerForm({
     heading: 'แก้ไขข้อมูลลูกค้า',
@@ -263,6 +286,8 @@ function renderEditCustomerPage(options = {}) {
     submitLabel: 'บันทึกการแก้ไข',
     includeHidden: hidden,
     formData,
+    showStatus: options.showStatus === true,
+    activeNav: options.activeNav || '',
     ...options
   });
 }
@@ -277,9 +302,20 @@ function renderSearchPage({ query = '', results = [], total = 0 }) {
   };
 
   const tableContent = results.length
-    ? `<table class="table">
+    ? `
+    <form id="bulkDeleteForm" method="POST" action="/customers/delete" onsubmit="return confirmBulkDelete(event)">
+      <div style="display:flex; justify-content: space-between; align-items:center; gap: 1rem; margin-bottom: .5rem;">
+        <div>${infoMarkup}</div>
+        <div id="deleteBar" style="display:none;">
+          <button id="deleteSelectedBtn" class="primary icon-only" type="submit" aria-label="ลบรายการที่เลือก">
+            <span class="btn-icon">🗑️</span><span class="btn-text">ลบรายการที่เลือก</span>
+          </button>
+        </div>
+      </div>
+      <table class="table">
         <thead>
           <tr>
+            <th style="width:34px"><input type="checkbox" id="selectAll" aria-label="เลือกทั้งหมด" /></th>
             <th>ชื่อลูกค้า</th>
             <th>ทะเบียนรถ</th>
             <th>พ.ร.บ.</th>
@@ -292,6 +328,7 @@ function renderSearchPage({ query = '', results = [], total = 0 }) {
         <tbody>
           ${results.map(record => `
             <tr>
+              <td><input type="checkbox" class="row-check" name="rows" value="${record.rowNumber ?? ''}" /></td>
               <td><a class="record-link" href="/customers/edit?row=${record.rowNumber ?? ''}">${escapeHtml(record.customerName || '')}</a></td>
               <td>${escapeHtml(record.licensePlate || '')}</td>
               <td>${describePair('ทำ', record.actIssuedDate, 'ครบกำหนด', record.actExpiryDate)}</td>
@@ -301,8 +338,42 @@ function renderSearchPage({ query = '', results = [], total = 0 }) {
               <td>${escapeHtml(record.notes || '')}</td>
             </tr>`).join('')}
         </tbody>
-      </table>`
-    : '<p class="muted">ยังไม่มีข้อมูลลูกค้าให้แสดง</p>';
+      </table>
+    </form>
+    <script>
+      (function(){
+        const selectAll = document.getElementById('selectAll');
+        const form = document.getElementById('bulkDeleteForm');
+        const btn = document.getElementById('deleteSelectedBtn');
+        const bar = document.getElementById('deleteBar');
+        function updateBtn(){
+          const any = form.querySelectorAll('.row-check:checked').length > 0;
+          // Show/hide the delete bar based on selection
+          if (bar) bar.style.display = any ? 'block' : 'none';
+          // Keep icon-only class logic optional (hidden when none anyway)
+          btn.classList.toggle('icon-only', !any);
+        }
+        function onToggleAll(){
+          const checks = form.querySelectorAll('.row-check');
+          checks.forEach(c => { c.checked = selectAll.checked; });
+          updateBtn();
+        }
+        function onRowChange(){ updateBtn(); }
+        if (selectAll) selectAll.addEventListener('change', onToggleAll);
+        form.querySelectorAll('.row-check').forEach(c => c.addEventListener('change', onRowChange));
+        window.confirmBulkDelete = function(e){
+          if (form.querySelectorAll('.row-check:checked').length === 0) { e.preventDefault(); return false; }
+          if (!confirm('ยืนยันการลบรายการที่เลือกทั้งหมดหรือไม่?')) { e.preventDefault(); return false; }
+          return true;
+        };
+        updateBtn();
+      })();
+    </script>
+    `
+    : `<div>
+        ${infoMarkup}
+        <p class="muted">ยังไม่มีข้อมูลลูกค้าให้แสดง</p>
+      </div>`;
 
   const content = `
     <h2>ค้นหาลูกค้า</h2>
@@ -316,16 +387,31 @@ function renderSearchPage({ query = '', results = [], total = 0 }) {
         <button class="primary" type="submit">ค้นหา</button>
       </div>
     </form>
-    ${infoMarkup}
     ${tableContent}
   `;
   return renderLayout({ pageTitle: 'ค้นหาลูกค้า', active: 'search', content });
 }
 
 function renderExpiringPage({ customers = [], days = DEFAULT_EXPIRY_WINDOW_DAYS }) {
-  const describePair = (labelA, dateA, labelB, dateB) => {
+  const describePair = (labelA, dateA, labelB, dateB, highlightB = false) => {
+    const bVal = `<span class="${highlightB ? 'due-highlight' : ''}">${escapeHtml(formatDate(dateB))}</span>`;
     return `<div><strong>${labelA}:</strong> ${escapeHtml(formatDate(dateA))}</div>
-            <div><strong>${labelB}:</strong> ${escapeHtml(formatDate(dateB))}</div>`;
+            <div><strong>${labelB}:</strong> ${bVal}</div>`;
+  };
+
+  const renderStatus = (value) => {
+    const text = String(value ?? '').trim();
+    const map = {
+      '1': 'ยังไม่แจ้ง',
+      'ยังไม่แจ้ง': 'ยังไม่แจ้ง',
+      '2': 'กำลังดำเนินการ',
+      'กำลังดำเนินการ': 'กำลังดำเนินการ',
+      '3': 'ลูกค้าไม่ต่อ',
+      'ลูกค้าไม่ต่อ': 'ลูกค้าไม่ต่อ',
+      '4': 'ต่อสัญญาเรียบร้อย',
+      'ต่อสัญญาเรียบร้อย': 'ต่อสัญญาเรียบร้อย'
+    };
+    return escapeHtml(map[text] || 'ยังไม่แจ้ง');
   };
 
   const tableContent = customers.length
@@ -335,19 +421,25 @@ function renderExpiringPage({ customers = [], days = DEFAULT_EXPIRY_WINDOW_DAYS 
             <th>ชื่อลูกค้า</th>
             <th>ทะเบียนรถ</th>
             <th>พ.ร.บ.</th>
+            <th>ต่อภาษี</th>
+            <th>ภาคสมัครใจ</th>
             <th>เหลืออีก (วัน)</th>
             <th>เบอร์ติดต่อ</th>
+            <th>สถานะ</th>
             <th>หมายเหตุ</th>
           </tr>
         </thead>
         <tbody>
           ${customers.map(item => `
             <tr>
-              <td><a class="record-link" href="/customers/edit?row=${item.customer.rowNumber ?? ''}">${escapeHtml(item.customer.customerName || '')}</a></td>
+              <td><a class="record-link" href="/customers/edit?row=${item.customer.rowNumber ?? ''}&from=expiring">${escapeHtml(item.customer.customerName || '')}</a></td>
               <td>${escapeHtml(item.customer.licensePlate || '')}</td>
-              <td>${describePair('ทำ', item.customer.actIssuedDate, 'ครบกำหนด', item.customer.actExpiryDate)}</td>
-              <td>${item.daysRemaining}</td>
+              <td>${describePair('ทำ', item.customer.actIssuedDate, 'ครบกำหนด', item.customer.actExpiryDate, (item.act ?? null) !== null && item.act >= 0 && item.act < days)}</td>
+              <td>${describePair('ต่อ', item.customer.taxRenewalDate, 'ครบกำหนด', item.customer.taxExpiryDate, (item.tax ?? null) !== null && item.tax >= 0 && item.tax < days)}</td>
+              <td>${describePair('ทำ', item.customer.voluntaryIssuedDate, 'ครบกำหนด', item.customer.voluntaryExpiryDate, (item.vol ?? null) !== null && item.vol >= 0 && item.vol < days)}</td>
+              <td>${item.minDaysRemaining}</td>
               <td>${escapeHtml(item.customer.phone || '')}</td>
+              <td>${renderStatus(item.customer.status)}</td>
               <td>${escapeHtml(item.customer.notes || '')}</td>
             </tr>`).join('')}
         </tbody>
@@ -356,16 +448,7 @@ function renderExpiringPage({ customers = [], days = DEFAULT_EXPIRY_WINDOW_DAYS 
 
   const content = `
     <h2>แจ้งเตือนลูกค้าที่จะหมดอายุ</h2>
-    <p class="lead">ดูรายชื่อลูกค้าที่มีกำหนดต่ออายุภายในช่วง ${days} วันข้างหน้า (อ้างอิงจากวันที่ครบกำหนด พ.ร.บ.)</p>
-    <form method="GET" action="/customers/expiring" class="grid">
-      <div class="field">
-        <label for="days">ระบุช่วงวันล่วงหน้า</label>
-        <input id="days" name="days" type="number" min="1" max="365" value="${days}" />
-      </div>
-      <div class="field">
-        <button class="primary" type="submit">อัปเดตรายการ</button>
-      </div>
-    </form>
+    <p class="lead">รายการที่ครบกำหนดภายใน ${days} วันข้างหน้า (อ้างอิง พ.ร.บ., ต่อภาษี, ภาคสมัครใจ)</p>
     ${tableContent}
   `;
   return renderLayout({ pageTitle: 'แจ้งเตือนลูกค้าที่จะหมดอายุ', active: 'expiring', content });
@@ -400,6 +483,20 @@ async function updateCustomerInSheet(rowNumber, record) {
   }
 }
 
+async function deleteCustomersInSheet(rowNumbers = []) {
+  if (!Array.isArray(rowNumbers) || rowNumbers.length === 0) return { ok: false, reason: 'no-rows' };
+  if (!SHEET_UPDATE_URL) return { ok: false, reason: 'missing-update-url' };
+  const payload = { action: 'delete', rows: rowNumbers };
+  try {
+    const response = await fetch(SHEET_UPDATE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (!response.ok) return { ok: false, reason: 'response-error', status: response.status, text: await response.text() };
+    return { ok: true };
+  } catch (error) {
+    console.error('Google Sheet bulk delete error:', error);
+    return { ok: false, reason: 'exception', error };
+  }
+}
+
 function normaliseRecord(raw = {}, index = 0) {
   const base = {
     timestamp: raw.timestamp || raw.Timestamp || raw['Timestamp'] || null,
@@ -412,7 +509,8 @@ function normaliseRecord(raw = {}, index = 0) {
     voluntaryIssuedDate: raw.voluntaryIssuedDate || raw.VoluntaryIssuedDate || raw['วันที่ทำกรมธรรม์ภาคสมัครใจ'] || '',
     voluntaryExpiryDate: raw.voluntaryExpiryDate || raw.VoluntaryExpiryDate || raw['วันที่ครบกำหนดกรมธรรม์ภาคสมัครใจ'] || '',
     phone: raw.phone || raw.Phone || raw['เบอร์ติดต่อหลัก'] || '',
-    notes: raw.notes || raw.Notes || raw['หมายเหตุ'] || raw['บันทึก'] || ''
+    notes: raw.notes || raw.Notes || raw['หมายเหตุ'] || raw['บันทึก'] || '',
+    status: raw.status || raw.Status || raw['สถานะ'] || ''
   };
   const rowNumber = raw.rowNumber || raw.row || raw.__rowNumber || raw.__row || (index + 2);
   return {
@@ -468,6 +566,8 @@ function validateFormData(parsed) {
     voluntaryExpiryDate: parsed.voluntaryExpiryDate?.trim() ?? '',
     phone: parsed.phone?.trim() ?? '',
     notes: parsed.notes?.trim() ?? '',
+    status: parsed.status?.trim() ?? '',
+    from: parsed.from?.trim() ?? '',
     rowNumber: parsed.rowNumber ? Number.parseInt(parsed.rowNumber, 10) : undefined,
     timestamp: parsed.timestamp?.trim() ?? ''
   };
@@ -495,6 +595,20 @@ function validateFormData(parsed) {
   const taxExpiry = normaliseDateField('taxExpiryDate', 'วันที่ครบกำหนดต่อภาษี');
   const voluntaryIssued = normaliseDateField('voluntaryIssuedDate', 'วันที่ทำกรมธรรม์ภาคสมัครใจ');
   const voluntaryExpiry = normaliseDateField('voluntaryExpiryDate', 'วันที่ครบกำหนดกรมธรรม์ภาคสมัครใจ');
+
+  // Normalise status to Thai labels
+  const statusMap = {
+    '1': 'ยังไม่แจ้ง',
+    '2': 'กำลังดำเนินการ',
+    '3': 'ลูกค้าไม่ต่อ',
+    '4': 'ต่อสัญญาเรียบร้อย',
+    'ยังไม่แจ้ง': 'ยังไม่แจ้ง',
+    'กำลังดำเนินการ': 'กำลังดำเนินการ',
+    'ลูกค้าไม่ต่อ': 'ลูกค้าไม่ต่อ',
+    'ต่อสัญญาเรียบร้อย': 'ต่อสัญญาเรียบร้อย'
+  };
+  const statusValue = formData.status in statusMap ? statusMap[formData.status] : (formData.status || 'ยังไม่แจ้ง');
+  formData.status = statusValue;
 
   if (!formData.phone) {
     errors.phone = 'กรุณากรอกเบอร์ติดต่อหลัก';
@@ -531,6 +645,31 @@ function handleCreateCustomer(req, res) {
       res.end(renderAddCustomerPage({ message: 'กรุณาตรวจสอบข้อมูลที่ไฮไลต์และลองอีกครั้ง', status: 'error', formData, errors }));
       return;
     }
+    // Business rule: Only if status is "ต่อสัญญาเรียบร้อย", ensure no expiry is within the display window (<30 days)
+    if ((formData.status || '') === 'ต่อสัญญาเรียบร้อย') {
+      const act = daysUntil(formData.actExpiryDate);
+      const tax = daysUntil(formData.taxExpiryDate);
+      const vol = daysUntil(formData.voluntaryExpiryDate);
+      const within = v => v !== null && v >= 0 && v < DEFAULT_EXPIRY_WINDOW_DAYS;
+      const actBad = within(act);
+      const taxBad = within(tax);
+      const volBad = within(vol);
+      if (actBad || taxBad || volBad) {
+        const errMsg = `ปรับวันที่ให้พ้นช่วงแจ้งเตือน (< ${DEFAULT_EXPIRY_WINDOW_DAYS} วัน) หรือเปลี่ยนสถานะ`;
+        const newErrors = { ...errors };
+        if (actBad) newErrors.actExpiryDate = errMsg;
+        if (taxBad) newErrors.taxExpiryDate = errMsg;
+        if (volBad) newErrors.voluntaryExpiryDate = errMsg;
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(renderAddCustomerPage({
+          message: `ไม่สามารถบันทึกสถานะ "${escapeHtml(formData.status)}" ได้ เนื่องจากยังอยู่ในช่วงแจ้งเตือน (< ${DEFAULT_EXPIRY_WINDOW_DAYS} วัน) ของ พ.ร.บ./ต่อภาษี/ภาคสมัครใจ`,
+          status: 'error',
+          formData,
+          errors: newErrors
+        }));
+        return;
+      }
+    }
     const record = {
       timestamp: new Date().toISOString(),
       customerName: formData.customerName,
@@ -542,6 +681,7 @@ function handleCreateCustomer(req, res) {
       voluntaryIssuedDate: formData.voluntaryIssuedDate || null,
       voluntaryExpiryDate: formData.voluntaryExpiryDate || null,
       phone: formData.phone,
+      status: formData.status || 'ยังไม่แจ้ง',
       notes: formData.notes || null
     };
     await syncToGoogleSheet(record);
@@ -563,8 +703,44 @@ function handleUpdateCustomer(req, res) {
 
     if (Object.keys(errors).length > 0) {
       res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(renderEditCustomerPage({ message: 'กรุณาตรวจสอบข้อมูลที่ไฮไลต์และลองอีกครั้ง', status: 'error', formData, errors }));
+      res.end(renderEditCustomerPage({
+        message: 'กรุณาตรวจสอบข้อมูลที่ไฮไลต์และลองอีกครั้ง',
+        status: 'error',
+        formData,
+        errors,
+        showStatus: formData.from === 'expiring',
+        activeNav: formData.from === 'expiring' ? 'expiring' : 'search',
+        from: formData.from || ''
+      }));
       return;
+    }
+    // Business rule: Only if status is "ต่อสัญญาเรียบร้อย", ensure no expiry is within the display window (<30 days)
+    if ((formData.status || '') === 'ต่อสัญญาเรียบร้อย') {
+      const act = daysUntil(formData.actExpiryDate);
+      const tax = daysUntil(formData.taxExpiryDate);
+      const vol = daysUntil(formData.voluntaryExpiryDate);
+      const within = v => v !== null && v >= 0 && v < DEFAULT_EXPIRY_WINDOW_DAYS;
+      const actBad = within(act);
+      const taxBad = within(tax);
+      const volBad = within(vol);
+      if (actBad || taxBad || volBad) {
+        const errMsg = `ปรับวันที่ให้พ้นช่วงแจ้งเตือน (< ${DEFAULT_EXPIRY_WINDOW_DAYS} วัน) หรือเปลี่ยนสถานะ`;
+        const newErrors = { ...errors };
+        if (actBad) newErrors.actExpiryDate = errMsg;
+        if (taxBad) newErrors.taxExpiryDate = errMsg;
+        if (volBad) newErrors.voluntaryExpiryDate = errMsg;
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(renderEditCustomerPage({
+          message: `ไม่สามารถบันทึกสถานะ "${escapeHtml(formData.status)}" ได้ เนื่องจากยังอยู่ในช่วงแจ้งเตือน (< ${DEFAULT_EXPIRY_WINDOW_DAYS} วัน) ของ พ.ร.บ./ต่อภาษี/ภาคสมัครใจ`,
+          status: 'error',
+          formData,
+          errors: newErrors,
+          showStatus: formData.from === 'expiring',
+          activeNav: formData.from === 'expiring' ? 'expiring' : 'search',
+          from: formData.from || ''
+        }));
+        return;
+      }
     }
     const record = {
       timestamp: formData.timestamp || new Date().toISOString(),
@@ -577,11 +753,19 @@ function handleUpdateCustomer(req, res) {
       voluntaryIssuedDate: formData.voluntaryIssuedDate || null,
       voluntaryExpiryDate: formData.voluntaryExpiryDate || null,
       phone: formData.phone,
+      status: formData.status || 'ยังไม่แจ้ง',
       notes: formData.notes || null
     };
     await updateCustomerInSheet(formData.rowNumber, record);
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(renderEditCustomerPage({ message: 'บันทึกการแก้ไขเรียบร้อยแล้ว', status: 'success', formData }));
+    res.end(renderEditCustomerPage({
+      message: 'บันทึกการแก้ไขเรียบร้อยแล้ว',
+      status: 'success',
+      formData,
+      showStatus: formData.from === 'expiring',
+      activeNav: formData.from === 'expiring' ? 'expiring' : 'search',
+      from: formData.from || ''
+    }));
   });
 }
 
@@ -595,13 +779,54 @@ function daysUntil(dateIso) {
 }
 
 async function handleExpiring(req, res, url) {
-  const urlParams = new URLSearchParams(url.search || '');
-  const days = Math.min(365, Math.max(1, Number.parseInt(urlParams.get('days') || String(DEFAULT_EXPIRY_WINDOW_DAYS), 10)));
+  const days = DEFAULT_EXPIRY_WINDOW_DAYS; // fixed 30-day window
   const customers = await fetchCustomers();
   const items = customers
-    .map(c => ({ customer: c, daysRemaining: daysUntil(c.actExpiryDate) }))
-    .filter(x => x.daysRemaining !== null && x.daysRemaining >= 0 && x.daysRemaining <= days)
-    .sort((a, b) => (a.daysRemaining - b.daysRemaining) || (getRecordSortTime(a.customer) - getRecordSortTime(b.customer)));
+    .map(c => {
+      const act = daysUntil(c.actExpiryDate);
+      const tax = daysUntil(c.taxExpiryDate);
+      const vol = daysUntil(c.voluntaryExpiryDate);
+      const candidates = [act, tax, vol].filter(v => v !== null);
+      const minDays = candidates.length ? Math.min(...candidates) : null;
+      return { customer: c, act, tax, vol, minDaysRemaining: minDays };
+    })
+    .filter(x => {
+      const within = v => v !== null && v >= 0 && v < days;
+      return within(x.act) || within(x.tax) || within(x.vol);
+    })
+    .sort((a, b) => {
+      const ma = a.minDaysRemaining ?? Number.POSITIVE_INFINITY;
+      const mb = b.minDaysRemaining ?? Number.POSITIVE_INFINITY;
+      return (ma - mb) || (getRecordSortTime(a.customer) - getRecordSortTime(b.customer));
+    });
+
+  // Auto-default status to "ยังไม่แจ้ง" for any visible rows lacking a valid status.
+  const VALID_STATUSES = new Set(['ยังไม่แจ้ง', 'กำลังดำเนินการ', 'ลูกค้าไม่ต่อ', 'ต่อสัญญาเรียบร้อย']);
+  try {
+    const updates = items
+      .filter(it => !VALID_STATUSES.has(String(it.customer.status || '').trim()))
+      .map(it => {
+        const current = it.customer;
+        const record = {
+          timestamp: current.timestamp || new Date().toISOString(),
+          customerName: current.customerName,
+          licensePlate: current.licensePlate,
+          actIssuedDate: current.actIssuedDate || null,
+          actExpiryDate: current.actExpiryDate || null,
+          taxRenewalDate: current.taxRenewalDate || null,
+          taxExpiryDate: current.taxExpiryDate || null,
+          voluntaryIssuedDate: current.voluntaryIssuedDate || null,
+          voluntaryExpiryDate: current.voluntaryExpiryDate || null,
+          phone: current.phone,
+          status: 'ยังไม่แจ้ง',
+          notes: current.notes || null
+        };
+        return updateCustomerInSheet(current.rowNumber, record);
+      });
+    if (updates.length) await Promise.allSettled(updates);
+  } catch (e) {
+    console.warn('Auto-default status updates failed:', e);
+  }
   const html = renderExpiringPage({ customers: items, days });
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(html);
@@ -640,7 +865,9 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && path === '/customers') return handleCreateCustomer(req, res);
 
     if (req.method === 'GET' && path === '/customers/edit') {
-      const row = Number.parseInt(new URLSearchParams(url.search || '').get('row') || '', 10);
+      const params = new URLSearchParams(url.search || '');
+      const row = Number.parseInt(params.get('row') || '', 10);
+      const from = params.get('from') || '';
       const customers = await fetchCustomers();
       const found = customers.find(c => Number(c.rowNumber) === row);
       if (!found) {
@@ -649,13 +876,40 @@ const server = createServer(async (req, res) => {
         return;
       }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(renderEditCustomerPage({ formData: found }));
+      res.end(renderEditCustomerPage({
+        formData: found,
+        showStatus: from === 'expiring',
+        activeNav: from === 'expiring' ? 'expiring' : 'search',
+        from
+      }));
       return;
     }
 
     if (req.method === 'POST' && path === '/customers/update') return handleUpdateCustomer(req, res);
 
     if (req.method === 'GET' && path === '/customers/search') return handleSearch(req, res, url);
+
+    if (req.method === 'POST' && path === '/customers/delete') {
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk.toString();
+        if (body.length > 1e6) req.socket.destroy();
+      });
+      req.on('end', async () => {
+        const parsed = parse(body);
+        const rowsRaw = parsed.rows;
+        const rows = Array.isArray(rowsRaw) ? rowsRaw : (rowsRaw ? [rowsRaw] : []);
+        const rowNumbers = rows.map(r => Number.parseInt(r, 10)).filter(n => Number.isFinite(n) && n >= 2);
+        if (rowNumbers.length === 0) {
+          res.writeHead(302, { Location: '/customers/search' });
+          return res.end();
+        }
+        await deleteCustomersInSheet(rowNumbers);
+        res.writeHead(302, { Location: '/customers/search' });
+        res.end();
+      });
+      return;
+    }
 
     if (req.method === 'GET' && path === '/customers/expiring') return handleExpiring(req, res, url);
 
