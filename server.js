@@ -289,13 +289,27 @@ function renderCustomerForm({
             const source = document.getElementById(sourceId);
             const target = document.getElementById(targetId);
             if (!source || !target) return;
+            const markManual = () => {
+              if (target.value) {
+                target.dataset.manualExpiry = 'true';
+              } else {
+                delete target.dataset.manualExpiry;
+              }
+            };
             const update = () => {
               const next = addOneYear(source.value);
               if (!next) return;
               target.value = next;
             };
-            source.addEventListener('change', update);
-            source.addEventListener('input', update);
+            const handleSourceChange = () => {
+              delete target.dataset.manualExpiry;
+              update();
+            };
+            source.addEventListener('input', handleSourceChange);
+            source.addEventListener('change', handleSourceChange);
+            target.addEventListener('input', markManual);
+            target.addEventListener('change', markManual);
+            if (!target.value) update();
           };
           pairs.forEach(([sourceId, targetId]) => attach(sourceId, targetId));
         })();
@@ -769,7 +783,7 @@ function handleUpdateCustomer(req, res) {
     const { formData, errors } = validateFormData(parsed);
     const cameFromExpiring = String(formData.from || '').trim().toLowerCase() === 'expiring';
     if (!cameFromExpiring) {
-      if (String(formData.status || '').trim() !== 'ลูกค้าไม่ต่อ') {
+      if (String(formData.status || '').trim() !== '????????????') {
         formData.status = '';
       }
     }
