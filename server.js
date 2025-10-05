@@ -72,6 +72,7 @@ function renderLayout({ pageTitle, active = '', content = '', alertMarkup = '' }
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20x2%3D%221%22%20y1%3D%220%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%232563eb%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2338bdf8%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22url%28%23g%29%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M20%2036c6-1%2010-6%2012-12%202%206%206%2011%2012%2012-6%201-10%206-12%2012-2-6-6-11-12-12z%22%20fill%3D%22%23f8fafc%22%2F%3E%0A%3C%2Fsvg%3E" />
   <title>${escapeHtml(pageTitle)} - ${APP_TITLE}</title>
   <style>
     :root { color-scheme: light; }
@@ -269,23 +270,24 @@ function renderCustomerForm({
       </div>`
         : `<input type="hidden" name="status" value="${safe('status')}">`
       }
-      <div class="field full-width" style="display: flex; justify-content: center; gap: 1rem; padding: 0.5rem 0; margin: 0; flex-wrap: wrap;">
-        <button class="primary" type="submit" style="min-width: 160px; display: flex; align-items: center; justify-content: center; padding: 0.75rem 1.5rem;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; margin-bottom: 1px;">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-            <polyline points="17 21 17 13 7 13 7 21"></polyline>
-            <line x1="7" y1="3" x2="7" y2="8" x3="17" y3="8"></line>
-          </svg>
-          ${escapeHtml(submitLabel)}
-        </button>
-        ${backUrl ? `
-        <a class="button secondary" href="${escapeHtml(backUrl)}" style="min-width: 120px; display: flex; align-items: center; justify-content: center; padding: 0.75rem 1.5rem;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; margin-bottom: 1px;">
-            <line x1="19" y1="12" x2="5" y2="12"></line>
-            <polyline points="12 19 5 12 12 5"></polyline>
-          </svg>
-          กลับ
-        </a>` : ''}
+      <div class="field full-width" style="padding: 0.5rem 0; margin: 0; display: flex; justify-content: center;">
+        <div style="display: inline-flex; justify-content: center; align-items: center; gap: 0.75rem; flex-wrap: nowrap;">
+          <button class="primary" type="submit" style="min-width: 160px; display: inline-flex; align-items: center; justify-content: center; padding: 0.75rem 1.5rem; flex: 0 0 auto;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; margin-bottom: 1px;">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+              <polyline points="17 21 17 13 7 13 7 21"></polyline>
+              <line x1="7" y1="3" x2="7" y2="8" x3="17" y3="8"></line>
+            </svg>
+            ${escapeHtml(submitLabel)}
+          </button>
+          ${backUrl ? `<a class="button secondary" href="${escapeHtml(backUrl)}" style="min-width: 120px; display: inline-flex; align-items: center; justify-content: center; padding: 0.75rem 1.5rem; flex: 0 0 auto;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; margin-bottom: 1px;">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            กลับ
+          </a>` : ''}
+        </div>
       </div>
     </form>
       <script>
