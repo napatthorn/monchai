@@ -43,6 +43,15 @@ function toInputDate(value) {
   return local.toISOString().slice(0, 10);
 }
 
+function addOneYearSameDay(dateIso) {
+  if (!dateIso) return '';
+  const base = new Date(dateIso);
+  if (Number.isNaN(base.getTime())) return '';
+  const next = new Date(base);
+  next.setFullYear(next.getFullYear() + 1);
+  return toInputDate(next);
+}
+
 function renderLayout({ pageTitle, active = '', content = '', alertMarkup = '' }) {
   const navItems = [
     { href: '/', label: 'หน้าหลัก', key: 'home' },
@@ -256,6 +265,41 @@ function renderCustomerForm({
         <button class="primary" type="submit">${escapeHtml(submitLabel)}</button>
       </div>
     </form>
+      <script>
+        (function() {
+          const pairs = [
+            ['actIssuedDate', 'actExpiryDate'],
+            ['taxRenewalDate', 'taxExpiryDate'],
+            ['voluntaryIssuedDate', 'voluntaryExpiryDate']
+          ];
+          const pad = num => String(num).padStart(2, '0');
+          const addOneYear = value => {
+            if (!value) return '';
+            const parts = value.split('-');
+            if (parts.length !== 3) return '';
+            const year = Number(parts[0]);
+            const month = Number(parts[1]);
+            const day = Number(parts[2]);
+            if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return '';
+            const date = new Date(Date.UTC(year, month - 1, day));
+            date.setUTCFullYear(date.getUTCFullYear() + 1);
+            return String(date.getUTCFullYear()) + '-' + pad(date.getUTCMonth() + 1) + '-' + pad(date.getUTCDate());
+          };
+          const attach = (sourceId, targetId) => {
+            const source = document.getElementById(sourceId);
+            const target = document.getElementById(targetId);
+            if (!source || !target) return;
+            const update = () => {
+              const next = addOneYear(source.value);
+              if (!next) return;
+              target.value = next;
+            };
+            source.addEventListener('change', update);
+            source.addEventListener('input', update);
+          };
+          pairs.forEach(([sourceId, targetId]) => attach(sourceId, targetId));
+        })();
+      </script>
   `;
 
   const activeTab = activeNav || (action.includes('/customers/update') ? 'search' : 'new');
@@ -597,13 +641,28 @@ function validateFormData(parsed) {
     return formatted;
   };
 
-  const actIssued = normaliseDateField('actIssuedDate', 'วันที่ทำ พ.ร.บ.');
-  const actExpiry = normaliseDateField('actExpiryDate', 'วันที่ครบกำหนด พ.ร.บ.');
-  const taxRenewal = normaliseDateField('taxRenewalDate', 'วันที่ต่อภาษี');
-  const taxExpiry = normaliseDateField('taxExpiryDate', 'วันที่ครบกำหนดต่อภาษี');
-  const voluntaryIssued = normaliseDateField('voluntaryIssuedDate', 'วันที่ทำกรมธรรม์ภาคสมัครใจ');
-  const voluntaryExpiry = normaliseDateField('voluntaryExpiryDate', 'วันที่ครบกำหนดกรมธรรม์ภาคสมัครใจ');
+  let actIssued = normaliseDateField('actIssuedDate', 'วันที่ทำ พ.ร.บ.');
+  let actExpiry = normaliseDateField('actExpiryDate', 'วันที่ครบกำหนด พ.ร.บ.');
+  let taxRenewal = normaliseDateField('taxRenewalDate', 'วันที่ต่อภาษี');
+  let taxExpiry = normaliseDateField('taxExpiryDate', 'วันที่ครบกำหนดต่อภาษี');
+  let voluntaryIssued = normaliseDateField('voluntaryIssuedDate', 'วันที่ทำกรมธรรม์ภาคสมัครใจ');
+  let voluntaryExpiry = normaliseDateField('voluntaryExpiryDate', 'วันที่ครบกำหนดกรมธรรม์ภาคสมัครใจ');
 
+  const syncExpiry = (issuedValue, expiryField) => {
+    if (!issuedValue) return null;
+    const computed = addOneYearSameDay(issuedValue);
+    if (!computed) return null;
+    formData[expiryField] = computed;
+    formData[`${expiryField}Input`] = computed;
+    return computed;
+  };
+
+  const syncedAct = syncExpiry(actIssued, 'actExpiryDate');
+  if (syncedAct) actExpiry = syncedAct;
+  const syncedTax = syncExpiry(taxRenewal, 'taxExpiryDate');
+  if (syncedTax) taxExpiry = syncedTax;
+  const syncedVoluntary = syncExpiry(voluntaryIssued, 'voluntaryExpiryDate');
+  if (syncedVoluntary) voluntaryExpiry = syncedVoluntary;
   // Normalise status to Thai labels
   const statusMap = {
     '1': 'ยังไม่แจ้งลูกค้า',
