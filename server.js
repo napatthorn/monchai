@@ -94,6 +94,8 @@ function renderLayout({ pageTitle, active = '', content = '', alertMarkup = '' }
     form.grid { display: grid; gap: 1rem; }
     @media (min-width: 540px) { form.grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } form.grid .full-width { grid-column: 1 / -1; } }
     .field { display: flex; flex-direction: column; gap: 0.45rem; }
+    .button.secondary { display:inline-flex; align-items:center; justify-content:center; padding:0.7rem 1.2rem; border-radius:10px; border:1px solid #94a3b8; background:#f1f5f9; color:#1e293b; text-decoration:none; font-size:0.95rem; transition:all 0.2s ease; margin-left: 0.5rem; }
+    .button.secondary:hover { background:#e2e8f0; transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     label { font-weight: 600; font-size: 0.95rem; color: #243b53; }
     input[type="text"], input[type="tel"], input[type="date"], textarea, select { padding: 0.8rem 0.95rem; font-size: 1rem; border-radius: 10px; border: 1px solid #d9e2ec; background: #f8fafc; transition: border-color 0.2s ease, box-shadow 0.2s ease; resize: vertical; min-height: 48px; }
     textarea { min-height: 96px; }
@@ -187,7 +189,8 @@ function renderCustomerForm({
   status = '',
   includeHidden = '',
   showStatus = false,
-  activeNav = ''
+  activeNav = '',
+  backUrl = ''
 } = {}) {
   const safe = key => escapeHtml(formData[key] ?? '');
   const valueFor = key => escapeHtml(formData[`${key}Input`] ?? formData[key] ?? '');
@@ -266,8 +269,23 @@ function renderCustomerForm({
       </div>`
         : `<input type="hidden" name="status" value="${safe('status')}">`
       }
-      <div class="field full-width">
-        <button class="primary" type="submit">${escapeHtml(submitLabel)}</button>
+      <div class="field full-width" style="display: flex; justify-content: center; gap: 1rem; padding: 0.5rem 0; margin: 0; flex-wrap: wrap;">
+        <button class="primary" type="submit" style="min-width: 160px; display: flex; align-items: center; justify-content: center; padding: 0.75rem 1.5rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; margin-bottom: 1px;">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            <line x1="7" y1="3" x2="7" y2="8" x3="17" y3="8"></line>
+          </svg>
+          ${escapeHtml(submitLabel)}
+        </button>
+        ${backUrl ? `
+        <a class="button secondary" href="${escapeHtml(backUrl)}" style="min-width: 120px; display: flex; align-items: center; justify-content: center; padding: 0.75rem 1.5rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; margin-bottom: 1px;">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          กลับ
+        </a>` : ''}
       </div>
     </form>
       <script>
@@ -337,6 +355,7 @@ function renderAddCustomerPage(options = {}) {
 
 function renderEditCustomerPage(options = {}) {
   const { formData = {} } = options;
+  const fromExpiring = options.from === 'expiring';
   const hidden = `
     <input type="hidden" name="rowNumber" value="${escapeHtml(formData.rowNumber ?? '')}" />
     <input type="hidden" name="timestamp" value="${escapeHtml(formData.timestamp ?? '')}" />
@@ -350,7 +369,8 @@ function renderEditCustomerPage(options = {}) {
     includeHidden: hidden,
     formData,
     showStatus: options.showStatus === true,
-    activeNav: options.activeNav || '',
+    activeNav: fromExpiring ? 'expiring' : (options.activeNav || 'search'),
+    backUrl: fromExpiring ? '/customers/expiring' : '/customers/search',
     ...options
   });
 }
