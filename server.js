@@ -199,10 +199,15 @@ function renderCustomerForm({
     <p class="lead">${escapeHtml(lead)}</p>
     <form class="grid" method="POST" action="${escapeHtml(action)}" novalidate>
       ${includeHidden}
-      <div class="field full-width">
+      <div class="field">
         <label for="customerName">ชื่อลูกค้า${errors.customerName ? ' <span class="req">*</span>' : ''}</label>
         <input id="customerName" name="customerName" type="text" maxlength="100" placeholder="ระบุชื่อ-นามสกุลลูกค้า" value="${safe('customerName')}" required class="${errors.customerName ? 'invalid' : ''}" />
         ${fieldError('customerName')}
+      </div>
+      <div class="field">
+        <label for="policyNumber">เลขที่กรมธรรม์</label>
+        <input id="policyNumber" name="policyNumber" type="text" maxlength="100" placeholder="เช่น 1234567890" value="${safe('policyNumber')}" class="${errors.policyNumber ? 'invalid' : ''}" />
+        ${fieldError('policyNumber')}
       </div>
       <div class="field">
         <label for="licensePlate">ทะเบียนรถ${errors.licensePlate ? ' <span class="req">*</span>' : ''}</label>
@@ -289,13 +294,27 @@ function renderCustomerForm({
             const source = document.getElementById(sourceId);
             const target = document.getElementById(targetId);
             if (!source || !target) return;
+            const markManual = () => {
+              if (target.value) {
+                target.dataset.manualExpiry = 'true';
+              } else {
+                delete target.dataset.manualExpiry;
+              }
+            };
             const update = () => {
               const next = addOneYear(source.value);
               if (!next) return;
               target.value = next;
             };
-            source.addEventListener('change', update);
-            source.addEventListener('input', update);
+            const handleSourceChange = () => {
+              if (target.dataset.manualExpiry === 'true') return;
+              update();
+            };
+            source.addEventListener('input', handleSourceChange);
+            source.addEventListener('change', handleSourceChange);
+            target.addEventListener('input', markManual);
+            target.addEventListener('change', markManual);
+            if (!target.value) update();
           };
           pairs.forEach(([sourceId, targetId]) => attach(sourceId, targetId));
         })();
@@ -486,10 +505,10 @@ function renderExpiringPage({ customers = [], days = DEFAULT_EXPIRY_WINDOW_DAYS 
             <tr>
               <td><a class="record-link" href="/customers/edit?row=${item.customer.rowNumber ?? ''}&from=expiring">${escapeHtml(item.customer.customerName || '')}</a></td>
               <td>${escapeHtml(item.customer.licensePlate || '')}</td>
-              <td>${describePair('ทำ', item.customer.actIssuedDate, 'ครบกำหนด', item.customer.actExpiryDate, (item.act ?? null) !== null && item.act >= 0 && item.act < days)}</td>
-              <td>${describePair('ต่อ', item.customer.taxRenewalDate, 'ครบกำหนด', item.customer.taxExpiryDate, (item.tax ?? null) !== null && item.tax >= 0 && item.tax < days)}</td>
-              <td>${describePair('ทำ', item.customer.voluntaryIssuedDate, 'ครบกำหนด', item.customer.voluntaryExpiryDate, (item.vol ?? null) !== null && item.vol >= 0 && item.vol < days)}</td>
-              <td>${item.minDaysRemaining}</td>
+              <td>${describePair('ทำ', item.customer.actIssuedDate, 'ครบกำหนด', item.customer.actExpiryDate, (item.act ?? null) !== null && item.act < days)}</td>
+              <td>${describePair('ต่อ', item.customer.taxRenewalDate, 'ครบกำหนด', item.customer.taxExpiryDate, (item.tax ?? null) !== null && item.tax < days)}</td>
+              <td>${describePair('ทำ', item.customer.voluntaryIssuedDate, 'ครบกำหนด', item.customer.voluntaryExpiryDate, (item.vol ?? null) !== null && item.vol < days)}</td>
+              <td>${item.minDaysRemaining == null ? '-' : (item.minDaysRemaining < 0 ? `<strong style="color:#dc2626;">${item.minDaysRemaining}</strong>` : item.minDaysRemaining)}</td>
               <td>${escapeHtml(item.customer.phone || '')}</td>
               <td>${escapeHtml(item.customer.notes || '')}</td>
               <td>${renderStatus(item.customer.status)}</td>
@@ -554,6 +573,7 @@ function normaliseRecord(raw = {}, index = 0) {
     timestamp: raw.timestamp || raw.Timestamp || raw['Timestamp'] || null,
     customerName: raw.customerName || raw.CustomerName || raw['ชื่อลูกค้า'] || '',
     licensePlate: raw.licensePlate || raw.LicensePlate || raw['ทะเบียนรถ'] || '',
+    policyNumber: raw.policyNumber || raw.PolicyNumber || raw['เลขที่กรมธรรม์'] || '',
     actIssuedDate: raw.actIssuedDate || raw.ActIssuedDate || raw['วันที่ทำ พ.ร.บ.'] || '',
     actExpiryDate: raw.actExpiryDate || raw.ActExpiryDate || raw['วันที่ครบกำหนด พ.ร.บ.'] || '',
     taxRenewalDate: raw.taxRenewalDate || raw.TaxRenewalDate || raw['วันที่ต่อภาษี'] || '',
@@ -609,6 +629,7 @@ function normalisePath(pathname) {
 function validateFormData(parsed) {
   const formData = {
     customerName: parsed.customerName?.trim() ?? '',
+    policyNumber: parsed.policyNumber?.trim() ?? '',
     licensePlate: parsed.licensePlate?.trim() ?? '',
     actIssuedDate: parsed.actIssuedDate?.trim() ?? '',
     actExpiryDate: parsed.actExpiryDate?.trim() ?? '',
@@ -641,28 +662,13 @@ function validateFormData(parsed) {
     return formatted;
   };
 
-  let actIssued = normaliseDateField('actIssuedDate', 'วันที่ทำ พ.ร.บ.');
-  let actExpiry = normaliseDateField('actExpiryDate', 'วันที่ครบกำหนด พ.ร.บ.');
-  let taxRenewal = normaliseDateField('taxRenewalDate', 'วันที่ต่อภาษี');
-  let taxExpiry = normaliseDateField('taxExpiryDate', 'วันที่ครบกำหนดต่อภาษี');
-  let voluntaryIssued = normaliseDateField('voluntaryIssuedDate', 'วันที่ทำกรมธรรม์ภาคสมัครใจ');
-  let voluntaryExpiry = normaliseDateField('voluntaryExpiryDate', 'วันที่ครบกำหนดกรมธรรม์ภาคสมัครใจ');
+  const actIssued = normaliseDateField('actIssuedDate', '???????? ?.?.?.');
+  const actExpiry = normaliseDateField('actExpiryDate', '?????????????? ?.?.?.');
+  const taxRenewal = normaliseDateField('taxRenewalDate', '?????????????');
+  const taxExpiry = normaliseDateField('taxExpiryDate', '?????????????????????');
+  const voluntaryIssued = normaliseDateField('voluntaryIssuedDate', '??????????????????????????');
+  const voluntaryExpiry = normaliseDateField('voluntaryExpiryDate', '????????????????????????????????');
 
-  const syncExpiry = (issuedValue, expiryField) => {
-    if (!issuedValue) return null;
-    const computed = addOneYearSameDay(issuedValue);
-    if (!computed) return null;
-    formData[expiryField] = computed;
-    formData[`${expiryField}Input`] = computed;
-    return computed;
-  };
-
-  const syncedAct = syncExpiry(actIssued, 'actExpiryDate');
-  if (syncedAct) actExpiry = syncedAct;
-  const syncedTax = syncExpiry(taxRenewal, 'taxExpiryDate');
-  if (syncedTax) taxExpiry = syncedTax;
-  const syncedVoluntary = syncExpiry(voluntaryIssued, 'voluntaryExpiryDate');
-  if (syncedVoluntary) voluntaryExpiry = syncedVoluntary;
   // Normalise status to Thai labels
   const statusMap = {
     '1': 'ยังไม่แจ้งลูกค้า',
@@ -742,6 +748,7 @@ function handleCreateCustomer(req, res) {
       timestamp: new Date().toISOString(),
       customerName: formData.customerName,
       licensePlate: formData.licensePlate,
+      policyNumber: formData.policyNumber || null,
       actIssuedDate: formData.actIssuedDate || null,
       actExpiryDate: formData.actExpiryDate || null,
       taxRenewalDate: formData.taxRenewalDate || null,
@@ -768,8 +775,40 @@ function handleUpdateCustomer(req, res) {
     const parsed = parse(body);
     const { formData, errors } = validateFormData(parsed);
     const cameFromExpiring = String(formData.from || '').trim().toLowerCase() === 'expiring';
-    if (!cameFromExpiring) {
-      if (String(formData.status || '').trim() !== 'ลูกค้าไม่ต่อ') {
+                if (!cameFromExpiring) {
+      const statusTrimmed = String(formData.status || '').trim();
+      if (statusTrimmed === 'ลูกค้าไม่ต่อ') {
+        const suffix = ' (ลูกค้าไม่ต่อ)';
+        const act = daysUntil(formData.actExpiryDate);
+        const tax = daysUntil(formData.taxExpiryDate);
+        const vol = daysUntil(formData.voluntaryExpiryDate);
+        const within = v => v !== null && v >= 0 && v < DEFAULT_EXPIRY_WINDOW_DAYS;
+        const actBad = within(act);
+        const taxBad = within(tax);
+        const volBad = within(vol);
+        if (actBad || taxBad || volBad) {
+          const warning = `* ปรับวันที่ให้พ้นช่วงแจ้งเตือน (< ${DEFAULT_EXPIRY_WINDOW_DAYS} วัน)`;
+          const newErrors = { ...errors };
+          if (actBad) newErrors.actExpiryDate = warning;
+          if (taxBad) newErrors.taxExpiryDate = warning;
+          if (volBad) newErrors.voluntaryExpiryDate = warning;
+          res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(renderEditCustomerPage({
+            message: `ไม่สามารถบันทึกได้ เนื่องจากวันที่ครบกำหนดยังอยู่ในช่วงแจ้งเตือน (< ${DEFAULT_EXPIRY_WINDOW_DAYS} วัน)`,
+            status: 'error',
+            formData,
+            errors: newErrors,
+            showStatus: formData.from === 'expiring',
+            activeNav: formData.from === 'expiring' ? 'expiring' : 'search',
+            from: formData.from || ''
+          }));
+          return;
+        }
+        const nameRaw = formData.customerName == null ? '' : String(formData.customerName);
+        const trimmedName = nameRaw.trimEnd();
+        formData.customerName = trimmedName.endsWith(suffix) ? trimmedName.slice(0, -suffix.length).trimEnd() : trimmedName;
+        formData.status = '';
+      } else {
         formData.status = '';
       }
     }
@@ -798,7 +837,7 @@ function handleUpdateCustomer(req, res) {
       const taxBad = within(tax);
       const volBad = within(vol);
       if (actBad || taxBad || volBad) {
-        const errMsg = `ปรับวันที่ให้พ้นช่วงแจ้งเตือน (< ${DEFAULT_EXPIRY_WINDOW_DAYS} วัน) หรือเปลี่ยนสถานะ`;
+        const errMsg = `ปรับวันที่ให้อยู่พ้นช่วงแจ้งเตือน (< ${DEFAULT_EXPIRY_WINDOW_DAYS} วัน) หรือเปลี่ยนสถานะ`;
         const newErrors = { ...errors };
         if (actBad) newErrors.actExpiryDate = errMsg;
         if (taxBad) newErrors.taxExpiryDate = errMsg;
@@ -815,12 +854,26 @@ function handleUpdateCustomer(req, res) {
         }));
         return;
       }
+      formData.status = '';
     }
-    const statusForRecord = formData.status === '' ? null : (formData.status || 'ยังไม่แจ้งลูกค้า');
+
+        const suffixNotRenew = ' (ลูกค้าไม่ต่อ)';
+    const currentNameRaw = formData.customerName == null ? '' : String(formData.customerName);
+    const currentNameTrimmed = currentNameRaw.trimEnd();
+    if (String(formData.status || '').trim() === 'ลูกค้าไม่ต่อ') {
+      if (!currentNameTrimmed.endsWith(suffixNotRenew)) {
+        formData.customerName = currentNameTrimmed ? `${currentNameTrimmed}${suffixNotRenew}` : 'ลูกค้าไม่ต่อ';
+      }
+    } else if (currentNameTrimmed.endsWith(suffixNotRenew)) {
+      formData.customerName = currentNameTrimmed.slice(0, -suffixNotRenew.length).trimEnd();
+    }
+
+        const statusForRecord = formData.status === '' ? null : (formData.status || 'ยังไม่แจ้งลูกค้า');
     const record = {
       timestamp: formData.timestamp || new Date().toISOString(),
       customerName: formData.customerName,
       licensePlate: formData.licensePlate,
+      policyNumber: formData.policyNumber || null,
       actIssuedDate: formData.actIssuedDate || null,
       actExpiryDate: formData.actExpiryDate || null,
       taxRenewalDate: formData.taxRenewalDate || null,
@@ -866,7 +919,7 @@ async function handleExpiring(req, res, url) {
       return { customer: c, act, tax, vol, minDaysRemaining: minDays };
     })
     .filter(x => {
-      const within = v => v !== null && v >= 0 && v < days;
+      const within = v => v !== null && v < days;
       return within(x.act) || within(x.tax) || within(x.vol);
     })
     .sort((a, b) => {
@@ -887,7 +940,7 @@ async function handleExpiring(req, res, url) {
     'ต่อสัญญาเรียบร้อย': 'ต่อสัญญาเรียบร้อย'
   };
   const FALLBACK_STATUS = 'ยังไม่แจ้งลูกค้า';
-  const isWithinWindow = v => v !== null && v >= 0 && v < days;
+  const isWithinWindow = v => v !== null && v < days;
   try {
     const updates = items
       .map(it => {
@@ -903,11 +956,13 @@ async function handleExpiring(req, res, url) {
         const originalNameRaw = current.customerName == null ? '' : String(current.customerName);
         const trimmedName = originalNameRaw.trimEnd();
         let desiredName = trimmedName;
-        if (desiredStatus === 'ลูกค้าไม่ต่อ') {
-          const suffix = ' (ลูกค้าไม่ต่อ)';
-          if (!trimmedName.endsWith(suffix)) {
-            desiredName = trimmedName ? `${trimmedName}${suffix}` : 'ลูกค้าไม่ต่อ';
+        const suffixNotRenew = ' (ลูกค้าไม่ต่อ)';
+        if (typeof desiredStatus === 'string' && desiredStatus.includes('ลูกค้าไม่ต่อ')) {
+          if (!trimmedName.endsWith(suffixNotRenew)) {
+            desiredName = trimmedName ? `${trimmedName}${suffixNotRenew}` : 'ลูกค้าไม่ต่อ';
           }
+        } else if (trimmedName.endsWith(suffixNotRenew)) {
+          desiredName = trimmedName.slice(0, -suffixNotRenew.length).trimEnd();
         }
         const nameUpdated = desiredName !== trimmedName;
         const shouldUpdate = desiredStatus !== rawStatus || rawStatus !== originalStatus || nameUpdated;
@@ -918,6 +973,7 @@ async function handleExpiring(req, res, url) {
           timestamp: current.timestamp || new Date().toISOString(),
           customerName: desiredName,
           licensePlate: current.licensePlate,
+          policyNumber: current.policyNumber || null,
           actIssuedDate: current.actIssuedDate || null,
           actExpiryDate: current.actExpiryDate || null,
           taxRenewalDate: current.taxRenewalDate || null,
