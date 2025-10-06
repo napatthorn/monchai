@@ -661,7 +661,8 @@ function normaliseRecord(raw = {}, index = 0) {
     taxRenewalDateInput: toInputDate(base.taxRenewalDate),
     taxExpiryDateInput: toInputDate(base.taxExpiryDate),
     voluntaryIssuedDateInput: toInputDate(base.voluntaryIssuedDate),
-    voluntaryExpiryDateInput: toInputDate(base.voluntaryExpiryDate)
+    voluntaryExpiryDateInput: toInputDate(base.voluntaryExpiryDate),
+    registrationDateInput: toInputDate(base.registrationDate)
   };
 }
 
@@ -705,6 +706,8 @@ function validateFormData(parsed) {
     taxExpiryDate: parsed.taxExpiryDate?.trim() ?? '',
     voluntaryIssuedDate: parsed.voluntaryIssuedDate?.trim() ?? '',
     voluntaryExpiryDate: parsed.voluntaryExpiryDate?.trim() ?? '',
+    registrationDate: parsed.registrationDate?.trim() ?? '',
+    email: parsed.email?.trim() ?? '',
     phone: parsed.phone?.trim() ?? '',
     notes: parsed.notes?.trim() ?? '',
     status: parsed.status?.trim() ?? '',
@@ -846,6 +849,8 @@ function handleCreateCustomer(req, res) {
       taxExpiryDate: formData.taxExpiryDate || null,
       voluntaryIssuedDate: formData.voluntaryIssuedDate || null,
       voluntaryExpiryDate: formData.voluntaryExpiryDate || null,
+      registrationDate: formData.registrationDate || null,
+      email: formData.email || null,
       phone: formData.phone,
       status: formData.status || 'ยังไม่แจ้งลูกค้า',
       notes: formData.notes || null
@@ -971,6 +976,8 @@ function handleUpdateCustomer(req, res) {
       taxExpiryDate: formData.taxExpiryDate || null,
       voluntaryIssuedDate: formData.voluntaryIssuedDate || null,
       voluntaryExpiryDate: formData.voluntaryExpiryDate || null,
+      registrationDate: formData.registrationDate || null,
+      email: formData.email || null,
       phone: formData.phone,
       status: statusForRecord,
       notes: formData.notes || null
