@@ -7,9 +7,9 @@ pnpm-debug.log*
 package-lock.json
 
 # Env and secrets
-.env
-*.env
-.env.*
+#.env
+#*.env
+#.env.*
 
 # Logs
 logs/
