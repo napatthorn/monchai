@@ -314,29 +314,50 @@ function renderCustomerForm({
             const source = document.getElementById(sourceId);
             const target = document.getElementById(targetId);
             if (!source || !target) return;
-            const markManual = () => {
+
+            // Check if target already has a value and mark it as manually set
+            if (target.value) {
+              target.dataset.manualExpiry = 'true';
+            }
+
+            const updateTargetDate = () => {
+              // Only update if target is empty and source has a valid date
+              if (!target.value && source.value) {
+                const next = addOneYear(source.value);
+                if (next) {
+                  target.value = next;
+                }
+              }
+            };
+
+            const handleSourceChange = () => {
+              // Only update if target is empty
+              if (!target.value) {
+                updateTargetDate();
+              }
+            };
+
+            const handleTargetInput = () => {
+              // Mark as manually set if user types in the target field
               if (target.value) {
                 target.dataset.manualExpiry = 'true';
               } else {
                 delete target.dataset.manualExpiry;
               }
             };
-            const update = () => {
-              const next = addOneYear(source.value);
-              if (!next) return;
-              target.value = next;
-            };
-            const handleSourceChange = () => {
-              if (target.dataset.manualExpiry === 'true') return;
-              update();
-            };
-            source.addEventListener('input', handleSourceChange);
+
+            // Initial setup - only update if target is empty
+            updateTargetDate();
+
+            // Event listeners
             source.addEventListener('change', handleSourceChange);
-            target.addEventListener('input', markManual);
-            target.addEventListener('change', markManual);
-            if (!target.value) update();
+            target.addEventListener('input', handleTargetInput);
           };
-          pairs.forEach(([sourceId, targetId]) => attach(sourceId, targetId));
+
+          // Initialize all date fields
+          pairs.forEach(([sourceId, targetId]) => {
+            attach(sourceId, targetId);
+          });
         })();
       </script>
   `;
