@@ -734,11 +734,21 @@ function validateFormData(parsed) {
   const statusValue = formData.status in statusMap ? statusMap[formData.status] : (formData.status || 'ยังไม่แจ้งลูกค้า');
   formData.status = statusValue;
 
-  if (!formData.phone) {
-    errors.phone = 'กรุณากรอกเบอร์ติดต่อหลัก';
+  // Phone is optional, but if provided, must be valid
+  if (formData.phone && formData.phone.trim() !== '') {
+    // Remove all non-digit characters
+    const digits = formData.phone.replace(/\D/g, '');
+    
+    // Check if it's a valid Thai mobile number (10 digits starting with 06, 08, or 09)
+    if (!/^(06|08|09)[0-9]{8}$/.test(digits)) {
+      errors.phone = 'กรุณากรอกหมายเลขโทรศัพท์มือถือที่ถูกต้อง (10 หลัก ขึ้นต้นด้วย 06, 08, หรือ 09)';
+    } else {
+      // Format the phone number as XXX-XXXXXXX
+      formData.phone = digits.replace(/^(\d{3})(\d+)$/, '$1-$2');
+    }
   } else {
-    const digits = formData.phone.replace(/[^0-9]/g, '');
-    if (digits.length < 7) errors.phone = 'กรุณากรอกเบอร์โทรศัพท์ที่ถูกต้อง';
+    // If empty, set to empty string
+    formData.phone = '';
   }
 
   return {
