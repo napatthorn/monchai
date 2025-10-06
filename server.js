@@ -98,7 +98,7 @@ function renderLayout({ pageTitle, active = '', content = '', alertMarkup = '' }
     .button.secondary { display:inline-flex; align-items:center; justify-content:center; padding:0.7rem 1.2rem; border-radius:10px; border:1px solid #94a3b8; background:#f1f5f9; color:#1e293b; text-decoration:none; font-size:0.95rem; transition:all 0.2s ease; margin-left: 0.5rem; }
     .button.secondary:hover { background:#e2e8f0; transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     label { font-weight: 600; font-size: 0.95rem; color: #243b53; }
-    input[type="text"], input[type="tel"], input[type="date"], textarea, select { padding: 0.8rem 0.95rem; font-size: 1rem; border-radius: 10px; border: 1px solid #d9e2ec; background: #f8fafc; transition: border-color 0.2s ease, box-shadow 0.2s ease; resize: vertical; min-height: 48px; }
+    input[type="text"], input[type="tel"], input[type="date"], input[type="email"], textarea, select { padding: 0.8rem 0.95rem; font-size: 1rem; border-radius: 10px; border: 1px solid #d9e2ec; background: #f8fafc; transition: border-color 0.2s ease, box-shadow 0.2s ease; resize: vertical; min-height: 48px; }
     textarea { min-height: 96px; }
     input:focus, textarea:focus, select:focus { border-color: #2c5282; box-shadow: 0 0 0 4px rgba(44, 82, 130, 0.15); outline: none; }
     input.invalid, textarea.invalid { border-color: #e53e3e; box-shadow: 0 0 0 4px rgba(229, 62, 62, 0.1); }
@@ -219,10 +219,26 @@ function renderCustomerForm({
         ${fieldError('licensePlate')}
       </div>
       <div class="field">
-        <label for="phone">เบอร์ติดต่อหลัก${errors.phone ? ' <span class="req">*</span>' : ''}</label>
+        <label for="registrationDate">วันที่จดทะเบียน</label>
+        <input id="registrationDate" name="registrationDate" type="date" value="${valueFor('registrationDate')}" class="${errors.registrationDate ? 'invalid' : ''}" />
+        ${fieldError('registrationDate')}
+      </div>
+      <div class="field">
+        <label for="phone">เบอร์ติดต่อ${errors.phone ? ' <span class="req">*</span>' : ''}</label>
         <input id="phone" name="phone" type="tel" maxlength="40" placeholder="เช่น 081-234-5678" value="${safe('phone')}" required class="${errors.phone ? 'invalid' : ''}" />
         ${fieldError('phone')}
       </div>
+      
+      <div class="field">
+        <label for="email">อีเมล</label>
+        <input id="email" name="email" type="email" maxlength="100" placeholder="เช่น example@email.com" value="${safe('email')}" class="${errors.email ? 'invalid' : ''}" />
+        ${fieldError('email')}
+      </div>
+      
+      <div class="section-divider full-width">
+        <h3></h3>
+      </div>
+      
       <div class="field">
         <label for="actIssuedDate">วันที่ทำ พ.ร.บ.</label>
         <input id="actIssuedDate" name="actIssuedDate" type="date" value="${valueFor('actIssuedDate')}" class="${errors.actIssuedDate ? 'invalid' : ''}" />
@@ -630,7 +646,9 @@ function normaliseRecord(raw = {}, index = 0) {
     taxExpiryDate: raw.taxExpiryDate || raw.TaxExpiryDate || raw['วันที่ครบกำหนดต่อภาษี'] || '',
     voluntaryIssuedDate: raw.voluntaryIssuedDate || raw.VoluntaryIssuedDate || raw['วันที่ทำกรมธรรม์ภาคสมัครใจ'] || '',
     voluntaryExpiryDate: raw.voluntaryExpiryDate || raw.VoluntaryExpiryDate || raw['วันที่ครบกำหนดกรมธรรม์ภาคสมัครใจ'] || '',
-    phone: raw.phone || raw.Phone || raw['เบอร์ติดต่อหลัก'] || '',
+    phone: raw.phone || raw.Phone || raw['เบอร์ติดต่อ'] || '',
+    email: raw.email || raw.Email || raw['อีเมล'] || '',
+    registrationDate: raw.registrationDate || raw.registrationdate || raw['วันที่จดทะเบียน'] || '',
     notes: raw.notes || raw.Notes || raw['หมายเหตุ'] || raw['บันทึก'] || '',
     status: raw.status || raw.Status || raw['สถานะ'] || ''
   };
@@ -718,6 +736,7 @@ function validateFormData(parsed) {
   const taxExpiry = normaliseDateField('taxExpiryDate', '?????????????????????');
   const voluntaryIssued = normaliseDateField('voluntaryIssuedDate', '??????????????????????????');
   const voluntaryExpiry = normaliseDateField('voluntaryExpiryDate', '????????????????????????????????');
+  const registrationDate = normaliseDateField('registrationDate', '??????????????');
 
   // Normalise status to Thai labels
   const statusMap = {
@@ -751,6 +770,17 @@ function validateFormData(parsed) {
     formData.phone = '';
   }
 
+  // Email validation if provided
+  if (formData.email && formData.email.trim() !== '') {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      errors.email = 'กรุณากรอกอีเมลให้ถูกต้อง';
+    }
+  } else {
+    // If empty, set to empty string
+    formData.email = '';
+  }
+
   return {
     formData: {
       ...formData,
@@ -759,7 +789,8 @@ function validateFormData(parsed) {
       taxRenewalDate: taxRenewal,
       taxExpiryDate: taxExpiry,
       voluntaryIssuedDate: voluntaryIssued,
-      voluntaryExpiryDate: voluntaryExpiry
+      voluntaryExpiryDate: voluntaryExpiry,
+      registrationDate: registrationDate
     },
     errors
   };
