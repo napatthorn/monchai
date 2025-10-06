@@ -315,14 +315,15 @@ function renderCustomerForm({
             const target = document.getElementById(targetId);
             if (!source || !target) return;
 
-            // Check if target already has a value and mark it as manually set
-            if (target.value) {
-              target.dataset.manualExpiry = 'true';
-            }
+            let isInitialLoad = true;
+            let isSourceChanged = false;
 
             const updateTargetDate = () => {
-              // Only update if target is empty and source has a valid date
-              if (!target.value && source.value) {
+              // Only update if source was changed by user, not on initial load
+              if (isInitialLoad) return;
+              
+              // Only update if target is not manually set and source has a valid date
+              if (!target.dataset.manualExpiry && source.value) {
                 const next = addOneYear(source.value);
                 if (next) {
                   target.value = next;
@@ -331,10 +332,8 @@ function renderCustomerForm({
             };
 
             const handleSourceChange = () => {
-              // Only update if target is empty
-              if (!target.value) {
-                updateTargetDate();
-              }
+              isSourceChanged = true;
+              updateTargetDate();
             };
 
             const handleTargetInput = () => {
@@ -346,12 +345,20 @@ function renderCustomerForm({
               }
             };
 
-            // Initial setup - only update if target is empty
-            updateTargetDate();
-
-            // Event listeners
+            // Set up event listeners first
             source.addEventListener('change', handleSourceChange);
             target.addEventListener('input', handleTargetInput);
+
+            // Mark initial load as complete after a small delay
+            // This ensures the 1-year rule doesn't trigger on page load
+            setTimeout(() => {
+              isInitialLoad = false;
+              
+              // If the source field was changed during initial load, update the target
+              if (isSourceChanged) {
+                updateTargetDate();
+              }
+            }, 100);
           };
 
           // Initialize all date fields
