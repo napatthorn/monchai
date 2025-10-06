@@ -314,29 +314,57 @@ function renderCustomerForm({
             const source = document.getElementById(sourceId);
             const target = document.getElementById(targetId);
             if (!source || !target) return;
-            const markManual = () => {
+
+            let isInitialLoad = true;
+            let isSourceChanged = false;
+
+            const updateTargetDate = () => {
+              // Only update if source was changed by user, not on initial load
+              if (isInitialLoad) return;
+              
+              // Only update if target is not manually set and source has a valid date
+              if (!target.dataset.manualExpiry && source.value) {
+                const next = addOneYear(source.value);
+                if (next) {
+                  target.value = next;
+                }
+              }
+            };
+
+            const handleSourceChange = () => {
+              isSourceChanged = true;
+              updateTargetDate();
+            };
+
+            const handleTargetInput = () => {
+              // Mark as manually set if user types in the target field
               if (target.value) {
                 target.dataset.manualExpiry = 'true';
               } else {
                 delete target.dataset.manualExpiry;
               }
             };
-            const update = () => {
-              const next = addOneYear(source.value);
-              if (!next) return;
-              target.value = next;
-            };
-            const handleSourceChange = () => {
-              if (target.dataset.manualExpiry === 'true') return;
-              update();
-            };
-            source.addEventListener('input', handleSourceChange);
+
+            // Set up event listeners first
             source.addEventListener('change', handleSourceChange);
-            target.addEventListener('input', markManual);
-            target.addEventListener('change', markManual);
-            if (!target.value) update();
+            target.addEventListener('input', handleTargetInput);
+
+            // Mark initial load as complete after a small delay
+            // This ensures the 1-year rule doesn't trigger on page load
+            setTimeout(() => {
+              isInitialLoad = false;
+              
+              // If the source field was changed during initial load, update the target
+              if (isSourceChanged) {
+                updateTargetDate();
+              }
+            }, 100);
           };
-          pairs.forEach(([sourceId, targetId]) => attach(sourceId, targetId));
+
+          // Initialize all date fields
+          pairs.forEach(([sourceId, targetId]) => {
+            attach(sourceId, targetId);
+          });
         })();
       </script>
   `;
