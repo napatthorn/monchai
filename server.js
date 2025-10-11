@@ -2,6 +2,11 @@ import "dotenv/config";
 import fetch from 'node-fetch';
 import { createServer } from 'http';
 import { parse } from 'querystring';
+import { writeFile, mkdir } from 'fs/promises';
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const PORT = process.env.PORT || 3000;
 const HOST = '127.0.0.1';
@@ -995,6 +1000,38 @@ function handleUpdateCustomer(req, res) {
   });
 }
 
+async function saveCustomersToFile(customers) {
+  const dataDir = `${__dirname}/data`;
+  const backupPath = `${dataDir}/customers_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+  
+  try {
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(backupPath, JSON.stringify(customers, null, 2));
+    return { success: true, path: backupPath };
+  } catch (error) {
+    console.error('Error saving backup:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+async function handleBackup(req, res) {
+  if (req.method !== 'POST') {
+    res.writeHead(405, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ success: false, error: 'Method not allowed' }));
+  }
+
+  try {
+    const customers = await fetchCustomers();
+    const result = await saveCustomersToFile(customers);
+    
+    res.writeHead(result.success ? 200 : 500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+  } catch (error) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: error.message }));
+  }
+}
+
 function daysUntil(dateIso) {
   if (!dateIso) return null;
   const target = new Date(dateIso);
@@ -1173,8 +1210,10 @@ const server = createServer(async (req, res) => {
       });
       return;
     }
-
-    if (req.method === 'GET' && path === '/customers/expiring') return handleExpiring(req, res, url);
+    if (path === '/customers/search') return handleSearch(req, res, url);
+    if (path.startsWith('/customers/') && path.endsWith('/edit')) return handleEditCustomer(req, res, url);
+    if (path === '/customers/expiring') return handleExpiring(req, res, url);
+    if (path === '/api/backup') return handleBackup(req, res);
 
     res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(renderLayout({ pageTitle: 'ไม่พบหน้า', content: '<p class="muted">ไม่พบหน้า</p>' }));
@@ -1185,6 +1224,35 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, HOST, () => {
+async function runBackupOnStartup() {
+  try {
+    const BACKUP_DIR = `${__dirname}/data`;
+    await mkdir(BACKUP_DIR, { recursive: true });
+    
+    // Check if backup already exists for today
+    const today = new Date().toISOString().split('T')[0];
+    const backupPattern = new RegExp(`customers_${today}`);
+    
+    const backupExists = (await import('fs')).readdirSync(BACKUP_DIR)
+      .some(file => backupPattern.test(file));
+
+    if (backupExists) {
+      console.log('Backup already exists for today, skipping...');
+      return;
+    }
+
+    console.log('Running startup backup...');
+    const customers = await fetchCustomers();
+    const backupPath = `${BACKUP_DIR}/customers_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+ await writeFile(backupPath, JSON.stringify(customers, null, 2));
+    console.log(`Backup created successfully: ${backupPath}`);
+  } catch (error) {
+    console.error('Error during startup backup:', error);
+  }
+}
+
+// Start the server and run backup
+server.listen(PORT, HOST, async () => {
   console.log(`Server running at http://${HOST}:${PORT}`);
+  await runBackupOnStartup();
 });
