@@ -77,6 +77,9 @@ function renderLayout({ pageTitle, active = '', content = '', alertMarkup = '' }
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/th.js"></script>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20x2%3D%221%22%20y1%3D%220%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%232563eb%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2338bdf8%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22url%28%23g%29%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M20%2036c6-1%2010-6%2012-12%202%206%206%2011%2012%2012-6%201-10%206-12%2012-2-6-6-11-12-12z%22%20fill%3D%22%23f8fafc%22%2F%3E%0A%3C%2Fsvg%3E" />
   <title>${escapeHtml(pageTitle)} - ${APP_TITLE}</title>
   <style>
@@ -136,6 +139,58 @@ function renderLayout({ pageTitle, active = '', content = '', alertMarkup = '' }
     .menu-card span { color: #486581; font-size: 0.95rem; }
     .menu-icon { width: 48px; height: 48px; display: inline-flex; align-items: center; justify-content: center; border-radius: 12px; background: linear-gradient(135deg, #2b6cb0, #63b3ed); color: #ffffff; font-size: 1.25rem; box-shadow: 0 10px 24px rgba(43, 108, 176, 0.35); }
   </style>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize flatpickr for all date inputs
+      const datepickers = document.querySelectorAll('input[type="date"]');
+      
+      // Store flatpickr instances
+      const fpInstances = {};
+      
+      datepickers.forEach(input => {
+        const fp = flatpickr(input, {
+          dateFormat: 'Y-m-d',
+          altInput: true,
+          altFormat: 'd/m/Y',
+          locale: 'th',
+          allowInput: true
+        });
+        
+        // Store instance for later use
+        fpInstances[input.id] = fp;
+        
+        // Add change handler
+        input.addEventListener('change', function() {
+          const inputId = this.id;
+          
+          // Map issued date fields to their corresponding expiry fields
+          const datePairs = {
+            'actIssuedDate': 'actExpiryDate',
+            'taxRenewalDate': 'taxExpiryDate',
+            'voluntaryIssuedDate': 'voluntaryExpiryDate',
+            'registrationDate': 'registrationExpiryDate'
+          };
+          
+          if (datePairs[inputId] && this.value) {
+            const expiryFieldId = datePairs[inputId];
+            const expiryField = document.getElementById(expiryFieldId);
+            
+            if (expiryField && fpInstances[expiryFieldId]) {
+              // Parse the selected date
+              const selectedDate = new Date(this.value);
+              
+              // Calculate one year later
+              const oneYearLater = new Date(selectedDate);
+              oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+              
+              // Set the expiry date
+              fpInstances[expiryFieldId].setDate(oneYearLater, true);
+            }
+          }
+        });
+      });
+    });
+  </script>
 </head>
 <body>
   <header>
@@ -312,6 +367,23 @@ function renderCustomerForm({
       </div>
     </form>
       <script>
+        document.addEventListener('DOMContentLoaded', function() {
+          // Initialize flatpickr for all date inputs
+          flatpickr('input[type="date"]', {
+            dateFormat: 'd/m/Y',
+            altInput: true,
+            altFormat: 'd/m/Y',
+            locale: 'th',
+            allowInput: true,
+            onChange: function(selectedDates, dateStr, instance) {
+              // Update the hidden input value in YYYY-MM-DD format
+              if (selectedDates[0]) {
+                instance.input.value = selectedDates[0].toISOString().split('T')[0];
+              }
+            }
+          });
+        });
+
         (function() {
           const pairs = [
             ['actIssuedDate', 'actExpiryDate'],
