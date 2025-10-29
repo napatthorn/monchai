@@ -1,25 +1,15 @@
 {
   "name": "monchai-app",
   "version": "1.0.0",
-  "description": "Local web app to capture customer name",
+  "description": "Customer insurance renewal tracking system",
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "dev": "tsx src/server.ts",
-    "build": "tsc",
     "start": "node server.js",
-    "start:ts": "node dist/server.js",
-    "watch": "tsc --watch",
     "check-duplicates": "node check-duplicates.cjs"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
     "node-fetch": "^3.3.2"
-  },
-  "devDependencies": {
-    "@types/node": "^24.9.2",
-    "ts-node": "^10.9.2",
-    "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
   }
 }
