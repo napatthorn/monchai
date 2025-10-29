@@ -27,3 +27,11 @@ Thumbs.db
 build/
 dist/
 coverage/
+
+# TypeScript (project uses plain JavaScript)
+src/
+tsconfig.json
+*.tsbuildinfo
+MIGRATION_SUMMARY.md
+QUICKSTART.md
+
