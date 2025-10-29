@@ -16,6 +16,27 @@ const SHEET_DATA_URL = process.env.SHEET_DATA_URL;
 const SHEET_UPDATE_URL = process.env.SHEET_UPDATE_URL || SHEET_WRITE_URL;
 const DEFAULT_EXPIRY_WINDOW_DAYS = 30;
 
+// Simple cache for customer data (30 seconds TTL for better performance)
+const customerCache = {
+  data: null,
+  lastFetch: 0,
+  TTL: 30000, // 30 seconds
+  get() {
+    if (this.data && Date.now() - this.lastFetch < this.TTL) {
+      return this.data;
+    }
+    return null;
+  },
+  set(customers) {
+    this.data = customers;
+    this.lastFetch = Date.now();
+  },
+  invalidate() {
+    this.data = null;
+    this.lastFetch = 0;
+  }
+};
+
 function escapeHtml(value = '') {
   const text = value == null ? '' : String(value);
   return text
@@ -138,6 +159,13 @@ function renderLayout({ pageTitle, active = '', content = '', alertMarkup = '' }
     .menu-card strong { font-size: 1.05rem; }
     .menu-card span { color: #486581; font-size: 0.95rem; }
     .menu-icon { width: 48px; height: 48px; display: inline-flex; align-items: center; justify-content: center; border-radius: 12px; background: linear-gradient(135deg, #2b6cb0, #63b3ed); color: #ffffff; font-size: 1.25rem; box-shadow: 0 10px 24px rgba(43, 108, 176, 0.35); }
+    /* Pagination */
+    .pagination { display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-top: 1.5rem; flex-wrap: wrap; }
+    .pagination-btn { display: inline-block; padding: 0.6rem 1rem; min-width: 42px; text-align: center; border-radius: 8px; text-decoration: none; color: #2c5282; background: #f8fafc; border: 1px solid #d9e2ec; font-size: 0.95rem; font-weight: 500; transition: all 0.15s ease; }
+    .pagination-btn:hover:not(.disabled):not(.active) { background: #e2e8f0; border-color: #cbd5e0; transform: translateY(-1px); }
+    .pagination-btn.active { background: linear-gradient(135deg, #2b6cb0, #26519a); color: #ffffff; border-color: #2b6cb0; font-weight: 700; box-shadow: 0 4px 12px rgba(43, 108, 176, 0.3); }
+    .pagination-btn.disabled { opacity: 0.5; cursor: not-allowed; color: #94a3b8; }
+    .pagination-ellipsis { display: inline-block; padding: 0.6rem 0.5rem; color: #94a3b8; font-weight: 600; }
   </style>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
@@ -498,9 +526,79 @@ function renderEditCustomerPage(options = {}) {
   });
 }
 
-function renderSearchPage({ query = '', results = [], total = 0 }) {
+function renderSearchPage({ query = '', results = [], total = 0, filteredTotal = 0, page = 1, totalPages = 1, perPage = 10 }) {
   const safeQuery = escapeHtml(query);
-  const infoMarkup = `<p class="muted">พบลูกค้าทั้งหมด ${total} ราย${query ? ` · กรองจากคำค้นหา "${safeQuery}"` : ''}</p>`;
+  const start = (page - 1) * perPage + 1;
+  const end = Math.min(start + results.length - 1, filteredTotal);
+  
+  const infoMarkup = query 
+    ? `<p class="muted">พบลูกค้าทั้งหมด ${total} ราย · กรองจากคำค้นหา "${safeQuery}" พบ ${filteredTotal} ราย${filteredTotal > 0 ? ` (แสดง ${start}-${end})` : ''}</p>`
+    : `<p class="muted">พบลูกค้าทั้งหมด ${total} ราย${total > 0 ? ` (แสดง ${start}-${end})` : ''}</p>`;
+
+  // Pagination controls
+  const renderPagination = () => {
+    if (totalPages <= 1) return '';
+    
+    const buildUrl = (p) => {
+      const params = new URLSearchParams();
+      if (query) params.set('q', query);
+      params.set('page', p);
+      return `/customers/search?${params.toString()}`;
+    };
+    
+    let pages = [];
+    
+    // Always show first page
+    pages.push(1);
+    
+    // Show pages around current page
+    const rangeStart = Math.max(2, page - 2);
+    const rangeEnd = Math.min(totalPages - 1, page + 2);
+    
+    // Add ellipsis after first page if needed
+    if (rangeStart > 2) {
+      pages.push('...');
+    }
+    
+    // Add middle pages
+    for (let i = rangeStart; i <= rangeEnd; i++) {
+      pages.push(i);
+    }
+    
+    // Add ellipsis before last page if needed
+    if (rangeEnd < totalPages - 1) {
+      pages.push('...');
+    }
+    
+    // Always show last page
+    if (totalPages > 1) {
+      pages.push(totalPages);
+    }
+    
+    const pageButtons = pages.map(p => {
+      if (p === '...') {
+        return `<span class="pagination-ellipsis">...</span>`;
+      }
+      const isActive = p === page;
+      return `<a href="${buildUrl(p)}" class="pagination-btn${isActive ? ' active' : ''}">${p}</a>`;
+    }).join('');
+    
+    const prevBtn = page > 1 
+      ? `<a href="${buildUrl(page - 1)}" class="pagination-btn">← ก่อนหน้า</a>`
+      : `<span class="pagination-btn disabled">← ก่อนหน้า</span>`;
+    
+    const nextBtn = page < totalPages
+      ? `<a href="${buildUrl(page + 1)}" class="pagination-btn">ถัดไป →</a>`
+      : `<span class="pagination-btn disabled">ถัดไป →</span>`;
+    
+    return `
+      <div class="pagination">
+        ${prevBtn}
+        ${pageButtons}
+        ${nextBtn}
+      </div>
+    `;
+  };
 
   const describePair = (labelA, dateA, labelB, dateB) => {
     return `<div><strong>${labelA}:</strong> ${escapeHtml(formatDate(dateA))}</div>
@@ -594,6 +692,7 @@ function renderSearchPage({ query = '', results = [], total = 0 }) {
       </div>
     </form>
     ${tableContent}
+    ${renderPagination()}
   `;
   return renderLayout({ pageTitle: 'ค้นหาลูกค้า', active: 'search', content });
 }
@@ -676,6 +775,8 @@ async function syncToGoogleSheet(record) {
   try {
     const response = await fetch(SHEET_WRITE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(record) });
     if (!response.ok) return { ok: false, reason: 'response-error', status: response.status, text: await response.text() };
+    // Invalidate cache after write
+    customerCache.invalidate();
     return { ok: true };
   } catch (error) {
     console.error('Google Sheet sync error:', error);
@@ -690,6 +791,8 @@ async function updateCustomerInSheet(rowNumber, record) {
   try {
     const response = await fetch(SHEET_UPDATE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     if (!response.ok) return { ok: false, reason: 'response-error', status: response.status, text: await response.text() };
+    // Invalidate cache after update
+    customerCache.invalidate();
     return { ok: true };
   } catch (error) {
     console.error('Google Sheet update error:', error);
@@ -704,6 +807,8 @@ async function deleteCustomersInSheet(rowNumbers = []) {
   try {
     const response = await fetch(SHEET_UPDATE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     if (!response.ok) return { ok: false, reason: 'response-error', status: response.status, text: await response.text() };
+    // Invalidate cache after delete
+    customerCache.invalidate();
     return { ok: true };
   } catch (error) {
     console.error('Google Sheet bulk delete error:', error);
@@ -750,6 +855,12 @@ function getRecordSortTime(record) {
 }
 
 async function fetchCustomers() {
+  // Check cache first for better performance
+  const cached = customerCache.get();
+  if (cached) {
+    return cached;
+  }
+
   if (!SHEET_DATA_URL) {
     console.warn('SHEET_DATA_URL is not set; returning empty customer list.');
     return [];
@@ -759,7 +870,12 @@ async function fetchCustomers() {
     if (!response.ok) return [];
     const payload = await response.json();
     const records = Array.isArray(payload?.records) ? payload.records : Array.isArray(payload) ? payload : [];
-    return records.map((raw, index) => normaliseRecord(raw, index)).filter(record => record.customerName || record.licensePlate);
+    const customers = records.map((raw, index) => normaliseRecord(raw, index)).filter(record => record.customerName || record.licensePlate);
+    
+    // Cache the results
+    customerCache.set(customers);
+    
+    return customers;
   } catch (error) {
     console.error('Error fetching customers from sheet:', error);
     return [];
@@ -830,7 +946,7 @@ function validateFormData(parsed) {
     'ลูกค้าไม่ต่อ': 'ลูกค้าไม่ต่อ',
     'ต่อสัญญาเรียบร้อย': 'ต่อสัญญาเรียบร้อย'
   };
-  const statusValue = formData.status in statusMap ? statusMap[formData.status] : (formData.status || 'ยังไม่แจ้งลูกค้า');
+  const statusValue = formData.status in statusMap ? statusMap[formData.status] : (formData.status || '');
   formData.status = statusValue;
 
   // Phone is optional, but if provided, must be valid
@@ -890,6 +1006,25 @@ function handleCreateCustomer(req, res) {
       res.end(renderAddCustomerPage({ message: 'กรุณาตรวจสอบข้อมูลที่ไฮไลต์และลองอีกครั้ง', status: 'error', formData, errors }));
       return;
     }
+    // Check for duplicate license plate
+    if (formData.licensePlate) {
+      const existingCustomers = await fetchCustomers();
+      const duplicate = existingCustomers.find(
+        customer => customer.licensePlate && 
+                   customer.licensePlate.toLowerCase() === formData.licensePlate.toLowerCase()
+      );
+      if (duplicate) {
+        errors.licensePlate = 'ทะเบียนรถนี้มีอยู่ในระบบแล้ว';
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(renderAddCustomerPage({ 
+          message: `ทะเบียนรถ "${escapeHtml(formData.licensePlate)}" มีอยู่ในระบบแล้ว (ลูกค้า: ${escapeHtml(duplicate.customerName || 'ไม่ระบุชื่อ')})`, 
+          status: 'error', 
+          formData, 
+          errors 
+        }));
+        return;
+      }
+    }
     // Business rule: Only if status is "ต่อสัญญาเรียบร้อย", ensure no expiry is within the display window (<30 days)
     if ((formData.status || '') === 'ต่อสัญญาเรียบร้อย') {
       const act = daysUntil(formData.actExpiryDate);
@@ -929,7 +1064,7 @@ function handleCreateCustomer(req, res) {
       registrationDate: formData.registrationDate || null,
       email: formData.email || null,
       phone: formData.phone,
-      status: formData.status || 'ยังไม่แจ้งลูกค้า',
+      status: formData.status || null,
       notes: formData.notes || null
     };
     await syncToGoogleSheet(record);
@@ -1000,6 +1135,29 @@ function handleUpdateCustomer(req, res) {
       }));
       return;
     }
+    // Check for duplicate license plate (excluding current customer)
+    if (formData.licensePlate) {
+      const existingCustomers = await fetchCustomers();
+      const duplicate = existingCustomers.find(
+        customer => customer.licensePlate && 
+                   customer.licensePlate.toLowerCase() === formData.licensePlate.toLowerCase() &&
+                   customer.rowNumber !== formData.rowNumber
+      );
+      if (duplicate) {
+        errors.licensePlate = 'ทะเบียนรถนี้มีอยู่ในระบบแล้ว';
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(renderEditCustomerPage({ 
+          message: `ทะเบียนรถ "${escapeHtml(formData.licensePlate)}" มีอยู่ในระบบแล้ว (ลูกค้า: ${escapeHtml(duplicate.customerName || 'ไม่ระบุชื่อ')})`, 
+          status: 'error', 
+          formData, 
+          errors,
+          showStatus: formData.from === 'expiring',
+          activeNav: formData.from === 'expiring' ? 'expiring' : 'search',
+          from: formData.from || ''
+        }));
+        return;
+      }
+    }
     // Business rule: Only enforce from the expiring dashboard when status is "ต่อสัญญาเรียบร้อย" (no upcoming expiries)
     if (cameFromExpiring && (formData.status || '') === 'ต่อสัญญาเรียบร้อย') {
       const act = daysUntil(formData.actExpiryDate);
@@ -1041,7 +1199,7 @@ function handleUpdateCustomer(req, res) {
       formData.customerName = currentNameTrimmed.slice(0, -suffixNotRenew.length).trimEnd();
     }
 
-        const statusForRecord = formData.status === '' ? null : (formData.status || 'ยังไม่แจ้งลูกค้า');
+        const statusForRecord = formData.status === '' ? null : (formData.status || null);
     const record = {
       timestamp: formData.timestamp || new Date().toISOString(),
       customerName: formData.customerName,
@@ -1205,15 +1363,44 @@ async function handleExpiring(req, res, url) {
 }
 
 async function handleSearch(req, res, url) {
-  const q = (new URLSearchParams(url.search || '')).get('q')?.trim() || '';
+  const params = new URLSearchParams(url.search || '');
+  const q = params.get('q')?.trim() || '';
+  const page = Math.max(1, parseInt(params.get('page') || '1', 10));
+  const perPage = 10;
+  
   const customers = await fetchCustomers();
-  const results = q
+  
+  // Filter results based on search query (search across ALL records)
+  const filteredResults = q
     ? customers.filter(r =>
         String(r.customerName || '').toLowerCase().includes(q.toLowerCase()) ||
         String(r.licensePlate || '').toLowerCase().includes(q.toLowerCase())
       )
     : customers;
-  const html = renderSearchPage({ query: q, results, total: customers.length });
+  
+  // Sort by timestamp descending (newest first)
+  filteredResults.sort((a, b) => {
+    const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+    return timeB - timeA; // Descending order (newest first)
+  });
+  
+  // Apply pagination to filtered results
+  const totalResults = filteredResults.length;
+  const totalPages = Math.ceil(totalResults / perPage);
+  const start = (page - 1) * perPage;
+  const end = start + perPage;
+  const paginatedResults = filteredResults.slice(start, end);
+  
+  const html = renderSearchPage({ 
+    query: q, 
+    results: paginatedResults, 
+    total: customers.length,
+    filteredTotal: totalResults,
+    page,
+    totalPages,
+    perPage
+  });
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(html);
 }
